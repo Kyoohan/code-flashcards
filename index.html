@@ -17,8 +17,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/diff@5.1.0/dist/diff.min.js" defer></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
+<!-- 라이브러리는 레포에 내장한다. GitHub 토큰이 이 페이지의 localStorage 에 저장되므로
+     외부 CDN 이 변조되면 토큰이 유출될 수 있는 경로를 아예 없앤다. -->
+<script src="vendor/diff.min.js" defer></script>
+<script src="vendor/highlight.min.js" defer></script>
 <style>
 /* ============================================================
    디자인 토큰
@@ -313,6 +315,15 @@ html[data-glass="off"] .lens { display: none; }
 }
 
 .save-note { font-size: 11px; color: var(--ink-4); margin-top: 14px; display: flex; align-items: center; gap: 6px; }
+.sync-line { font-size: 11.5px; color: var(--ink-3); display: flex; align-items: center; gap: 7px; }
+.sync-line .dot { background: var(--ink-4); transition: background .2s; }
+.sync-line:has(#sync-status[data-state="synced"]) .dot { background: var(--good); }
+.sync-line:has(#sync-status[data-state="syncing"]) .dot { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
+.sync-line:has(#sync-status[data-state="conflict"]) .dot,
+.sync-line:has(#sync-status[data-state="error"]) .dot,
+.sync-line:has(#sync-status[data-state="offline"]) .dot { background: var(--bad); }
+@keyframes pulse { 50% { opacity: .3 } }
+a.act { text-decoration: none; }
 .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--good); flex: 0 0 auto; }
 
 /* ============================================================
@@ -709,6 +720,7 @@ pre.answer-code {
       <span class="deck-sub" id="brand-sub"></span>
     </div>
     <div class="topbar-actions">
+      <span class="badge ghost" id="sync-chip" hidden></span>
       <span class="badge ghost" id="fsa-chip" hidden></span>
       <button class="icon-btn" id="theme-btn" title="테마 전환" aria-label="테마 전환"></button>
     </div>
@@ -778,6 +790,27 @@ pre.answer-code {
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5M4 21h16"/></svg>내보내기</button>
           </div>
           <input id="file-input" type="file" accept=".json,.ipynb" hidden>
+        </div>
+
+        <div class="rail-group">
+          <div class="rail-label">동기화</div>
+          <div class="sync-line">
+            <span class="dot" id="sync-dot"></span>
+            <span id="sync-status">연결 안 됨</span>
+          </div>
+          <div class="rail-actions" style="margin-top:10px">
+            <button class="act wide" id="sync-connect">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 0 0-3.2 19.5c.5.1.7-.2.7-.5v-1.8c-2.8.6-3.4-1.3-3.4-1.3-.4-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.7.3-1.1.6-1.4-2.2-.2-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.7 1a9.4 9.4 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.8-4.6 5 .3.3.7 1 .7 2v3c0 .3.2.6.7.5A10 10 0 0 0 12 2Z"/></svg>
+              GitHub Gist 연결</button>
+            <button class="act" id="sync-push" hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 20h16"/></svg>올리기</button>
+            <button class="act" id="sync-pull" hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M7 11l5 5 5-5"/><path d="M4 20h16"/></svg>불러오기</button>
+            <a class="act" id="sync-open" hidden target="_blank" rel="noopener noreferrer">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>Gist 열기</a>
+            <button class="act" id="sync-unlink" hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></svg>연결 해제</button>
+          </div>
         </div>
 
         <div class="rail-group">
@@ -1080,11 +1113,21 @@ function openDlg({ title, message = '', okText = '확인', cancelText = '취소'
       lab.textContent = f.label;
       const inp = document.createElement('input');
       inp.className = 'text-input';
+      inp.type = f.type || 'text';
       inp.value = f.value || '';
       inp.placeholder = f.placeholder || '';
       inp.dataset.name = f.name;
-      inp.style.marginBottom = '12px';
+      if (f.type === 'password') { inp.autocomplete = 'off'; inp.spellcheck = false; }
       wrap.append(lab, inp);
+      if (f.help) {
+        const h = document.createElement('div');
+        h.className = 'hint';
+        h.style.margin = '6px 0 12px';
+        h.append(...f.help);
+        wrap.append(h);
+      } else {
+        inp.style.marginBottom = '12px';
+      }
     });
     const ok = $('dlg-ok');
     ok.textContent = okText;
@@ -1735,6 +1778,245 @@ function applyState(data) {
   }
   return true;
 }
+
+/* ============================================================
+   7-b. 비공개 GitHub Gist 동기화
+   토큰은 이 브라우저의 localStorage 에만 저장되고 Gist 내용에는 절대 넣지 않는다.
+   ============================================================ */
+const GIST_TOKEN_KEY = 'fc_gist_token_v1';
+const GIST_META_KEY  = 'fc_gist_meta_v1';
+const GIST_FILENAME  = 'code-flashcards.json';
+const GH_API = 'https://api.github.com';
+
+const gist = (function () {
+  let meta = safeParse(localStorage.getItem(GIST_META_KEY), null) || { id: null, etag: null, syncedAt: 0, login: null };
+  let timer = null, inFlight = false, lastPushed = null, pendingConflict = false;
+
+  const token = () => localStorage.getItem(GIST_TOKEN_KEY) || '';
+  const linked = () => !!(token() && meta.id);
+
+  function saveMeta() { localStorage.setItem(GIST_META_KEY, JSON.stringify(meta)); }
+
+  async function api(path, opts = {}) {
+    const res = await fetch(GH_API + path, {
+      ...opts,
+      headers: {
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Authorization': 'Bearer ' + token(),
+        ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(opts.headers || {}),
+      },
+    });
+    return res;
+  }
+
+  function payload() {
+    return { ...collectState(), updatedAt: Date.now(), app: 'code-flashcards' };
+  }
+
+  /** Gist 파일 내용 읽기 (1MB 초과 시 truncated → raw_url 로 재요청) */
+  async function readFile(g) {
+    const f = g.files && g.files[GIST_FILENAME];
+    if (!f) return null;
+    if (f.truncated && f.raw_url) {
+      const r = await fetch(f.raw_url);
+      if (!r.ok) return null;
+      return safeParse(await r.text(), null);
+    }
+    return safeParse(f.content, null);
+  }
+
+  function status(state, detail) {
+    const el = $('sync-status');
+    const chip = $('sync-chip');
+    if (!el) return;
+    const map = {
+      off:      ['연결 안 됨', 'ghost'],
+      syncing:  ['저장 중…', 'accent'],
+      synced:   ['동기화됨', 'good'],
+      conflict: ['다른 기기와 충돌', 'bad'],
+      error:    ['오류', 'bad'],
+      offline:  ['오프라인', 'bad'],
+    };
+    const [label, cls] = map[state] || map.off;
+    el.textContent = detail || label;
+    el.dataset.state = state;
+    if (chip) {
+      chip.hidden = state === 'off';
+      chip.className = 'badge ' + cls;
+      chip.textContent = state === 'synced' && meta.syncedAt
+        ? '동기화 ' + new Date(meta.syncedAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+        : label;
+    }
+    $('sync-connect').textContent = linked() ? 'Gist 다시 연결' : 'GitHub Gist 연결';
+    ['sync-push', 'sync-pull', 'sync-unlink'].forEach(id => { const b = $(id); if (b) b.hidden = !linked(); });
+    const open = $('sync-open');
+    if (open) { open.hidden = !meta.id; open.href = meta.id ? `https://gist.github.com/${meta.id}` : '#'; }
+  }
+
+  /** 토큰으로 로그인 확인 → 기존 동기화 Gist 검색 → 없으면 새로 생성 */
+  async function connect(tok) {
+    localStorage.setItem(GIST_TOKEN_KEY, tok);
+    status('syncing', '확인 중…');
+    let me;
+    try { me = await api('/user'); }
+    catch { localStorage.removeItem(GIST_TOKEN_KEY); throw new Error('네트워크에 연결할 수 없습니다.'); }
+    if (me.status === 401) { localStorage.removeItem(GIST_TOKEN_KEY); throw new Error('토큰이 유효하지 않습니다.'); }
+    if (!me.ok) { localStorage.removeItem(GIST_TOKEN_KEY); throw new Error(`GitHub 응답 오류 (${me.status})`); }
+    const user = await me.json();
+    meta.login = user.login;
+
+    // 이 앱이 만든 Gist 가 이미 있는지 찾는다 (다른 기기에서 만든 것 포함)
+    status('syncing', 'Gist 찾는 중…');
+    const list = await api('/gists?per_page=100');
+    if (list.status === 403) throw new Error('토큰에 gist 권한이 없습니다.');
+    if (!list.ok) throw new Error(`Gist 목록을 읽지 못했습니다 (${list.status})`);
+    const gists = await list.json();
+    const found = gists.find(g => g.files && g.files[GIST_FILENAME]);
+
+    if (found) {
+      meta.id = found.id;
+      meta.etag = null;
+      saveMeta();
+      return { mode: 'found', id: found.id };
+    }
+    status('syncing', 'Gist 만드는 중…');
+    const created = await api('/gists', {
+      method: 'POST',
+      body: JSON.stringify({
+        description: '코드 플래시카드 동기화 데이터 (자동 생성)',
+        public: false,
+        files: { [GIST_FILENAME]: { content: JSON.stringify(payload(), null, 2) } },
+      }),
+    });
+    if (!created.ok) throw new Error(`Gist 생성 실패 (${created.status})`);
+    const g = await created.json();
+    meta.id = g.id;
+    meta.etag = null;
+    meta.syncedAt = Date.now();
+    saveMeta();
+    return { mode: 'created', id: g.id };
+  }
+
+  /** 원격이 우리가 마지막으로 본 상태와 다른지 확인 (ETag 304 는 rate limit 소모 안 함) */
+  async function remoteChanged() {
+    if (!meta.etag) return { changed: true, gist: null };
+    const res = await api(`/gists/${meta.id}`, { headers: { 'If-None-Match': meta.etag } });
+    if (res.status === 304) return { changed: false, gist: null };
+    if (res.status === 404) return { gone: true };
+    if (!res.ok) return { error: res.status };
+    return { changed: true, gist: await res.json(), etag: res.headers.get('ETag') };
+  }
+
+  async function push({ force = false } = {}) {
+    if (!linked() || inFlight) return;
+    // updatedAt 은 매번 달라지므로 변경 감지에서는 제외한다 (제외하지 않으면 항상 다르게 보임)
+    const state = collectState();
+    const key = JSON.stringify(state);
+    if (!force && key === lastPushed) { status('synced'); return; }
+    if (!navigator.onLine) { status('offline'); return; }
+    const body = JSON.stringify({ ...state, updatedAt: Date.now(), app: 'code-flashcards' }, null, 2);
+
+    inFlight = true;
+    status('syncing');
+    try {
+      if (!force) {
+        const chk = await remoteChanged();
+        if (chk.gone) { meta.id = null; saveMeta(); status('error', 'Gist 를 찾을 수 없음'); inFlight = false; return; }
+        if (chk.changed && chk.gist) {
+          const remote = await readFile(chk.gist);
+          // 원격이 우리가 올린 것보다 최신이면 덮어쓰기 전에 물어본다
+          if (remote && remote.updatedAt && remote.updatedAt > meta.syncedAt + 1000) {
+            meta.etag = chk.etag; saveMeta();
+            inFlight = false;
+            pendingConflict = true;
+            status('conflict');
+            await resolveConflict(remote);
+            return;
+          }
+          meta.etag = chk.etag;
+        }
+      }
+      const res = await api(`/gists/${meta.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ files: { [GIST_FILENAME]: { content: body } } }),
+      });
+      if (res.status === 401) { status('error', '토큰이 만료되었습니다'); inFlight = false; return; }
+      if (!res.ok) { status('error', `저장 실패 (${res.status})`); inFlight = false; return; }
+      const g = await res.json();
+      meta.etag = res.headers.get('ETag');
+      meta.syncedAt = Date.now();
+      saveMeta();
+      lastPushed = key;
+      status('synced');
+    } catch (e) {
+      status(navigator.onLine ? 'error' : 'offline');
+    } finally { inFlight = false; }
+  }
+
+  async function pull({ silent = false } = {}) {
+    if (!linked()) return false;
+    if (!navigator.onLine) { status('offline'); return false; }
+    status('syncing', '불러오는 중…');
+    try {
+      const res = await api(`/gists/${meta.id}`);
+      if (res.status === 404) { status('error', 'Gist 를 찾을 수 없음'); return false; }
+      if (res.status === 401) { status('error', '토큰이 만료되었습니다'); return false; }
+      if (!res.ok) { status('error', `불러오기 실패 (${res.status})`); return false; }
+      const g = await res.json();
+      const data = await readFile(g);
+      if (!data) { status('error', '데이터가 비어 있습니다'); return false; }
+      meta.etag = res.headers.get('ETag');
+      meta.syncedAt = Date.now();
+      saveMeta();
+      if (!applyState(data)) { status('error', '형식이 올바르지 않습니다'); return false; }
+      lastPushed = null;
+      status('synced');
+      if (!silent) toast('클라우드에서 불러왔습니다', 'good');
+      return true;
+    } catch (e) {
+      status(navigator.onLine ? 'error' : 'offline');
+      return false;
+    }
+  }
+
+  async function resolveConflict(remote) {
+    const when = remote.updatedAt ? new Date(remote.updatedAt).toLocaleString('ko-KR') : '알 수 없음';
+    const r = await openDlg({
+      title: '다른 기기에서 먼저 저장했습니다',
+      message: `클라우드에 더 최근 데이터가 있습니다 (${when}).\n어느 쪽을 남길지 골라 주세요.`,
+      okText: '클라우드 것 가져오기',
+      cancelText: '이 기기 것으로 덮어쓰기',
+    });
+    pendingConflict = false;
+    if (r) { await pull(); await boot(true); }
+    else { await push({ force: true }); toast('이 기기 내용으로 덮어썼습니다'); }
+  }
+
+  return {
+    get linked() { return linked(); },
+    get meta() { return meta; },
+    connect,
+    push,
+    pull,
+    refresh() { status(linked() ? (meta.syncedAt ? 'synced' : 'syncing') : 'off'); },
+    /** 데이터가 바뀔 때마다 호출 — 디바운스해서 한 번만 올린다 */
+    schedule() {
+      if (!linked() || pendingConflict) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => push(), 6000);
+    },
+    unlink() {
+      localStorage.removeItem(GIST_TOKEN_KEY);
+      localStorage.removeItem(GIST_META_KEY);
+      meta = { id: null, etag: null, syncedAt: 0, login: null };
+      lastPushed = null;
+      clearTimeout(timer);
+      status('off');
+    },
+  };
+})();
 async function fsaSync() {
   if (!_fsaHandle) return;
   if (await _fsaWrite(collectState())) stampSave();
@@ -1814,7 +2096,7 @@ function loadDecks() {
   deckList = safeParse(localStorage.getItem(DECKS_KEY), []);
   if (!Array.isArray(deckList)) deckList = [];
 }
-function persistDecks() { localStorage.setItem(DECKS_KEY, JSON.stringify(deckList)); }
+function persistDecks() { localStorage.setItem(DECKS_KEY, JSON.stringify(deckList)); gist.schedule(); }
 function activeDeck() { return deckList.find(d => d.id === activeDeckId) || null; }
 
 function migrateLegacy() {
@@ -1863,9 +2145,10 @@ function saveCards() {
   localStorage.setItem(cardsKey(activeDeckId), JSON.stringify(allCards));
   cardMap = new Map(allCards.map(c => [c.id, c]));
   fsaSync();
+  gist.schedule();
 }
 function loadStats() { statsMap = new Map(safeParse(localStorage.getItem(statsKey(activeDeckId)), [])); }
-function saveStats() { localStorage.setItem(statsKey(activeDeckId), JSON.stringify([...statsMap])); }
+function saveStats() { localStorage.setItem(statsKey(activeDeckId), JSON.stringify([...statsMap])); gist.schedule(); }
 function record(id, ok) {
   if (!id) return;
   const s = statsMap.get(id) || { attempts: 0, correct: 0, wrong: 0 };
@@ -1890,6 +2173,7 @@ function saveProgress() {
   }));
   stampSave();
   fsaSync();
+  gist.schedule();
 }
 function loadProgress() {
   const s = safeParse(localStorage.getItem(progKey(activeDeckId)), null);
@@ -2409,6 +2693,62 @@ $('deck-del').addEventListener('click', async () => {
   await boot(false);
   toast('덱을 삭제했습니다');
 });
+
+/* ── Gist 동기화 UI ─────────────────────────────── */
+function tokenHelpNodes() {
+  const a = document.createElement('a');
+  a.href = 'https://github.com/settings/tokens/new?scopes=gist&description=code-flashcards%20sync';
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  a.textContent = '토큰 만들러 가기';
+  a.style.color = 'var(--accent-ink)';
+  a.style.fontWeight = '600';
+  const t1 = document.createTextNode('위 링크는 ');
+  const b = document.createElement('b');
+  b.textContent = 'gist 권한만';
+  const t2 = document.createTextNode(' 선택된 상태로 열립니다. 만료일을 지정해 두시길 권합니다. · ');
+  return [t1, b, t2, a];
+}
+
+$('sync-connect').addEventListener('click', async () => {
+  const r = await openDlg({
+    title: 'GitHub Gist 연결',
+    message: '비공개 Gist 하나에 모든 덱이 저장됩니다. 토큰은 이 브라우저에만 보관되며 Gist 내용에는 들어가지 않습니다.',
+    fields: [{ name: 'token', label: 'Personal access token (classic)', type: 'password', placeholder: 'ghp_…', help: tokenHelpNodes() }],
+    okText: '연결',
+  });
+  if (!r || !r.token) return;
+  try {
+    const out = await gist.connect(r.token);
+    if (out.mode === 'found') {
+      const useRemote = await openDlg({
+        title: '기존 동기화 Gist를 찾았습니다',
+        message: '다른 기기에서 만든 데이터가 있습니다. 어느 쪽을 쓸지 골라 주세요.',
+        okText: '클라우드 것 가져오기',
+        cancelText: '이 기기 것 올리기',
+      });
+      if (useRemote) { if (await gist.pull()) await boot(true); }
+      else { await gist.push({ force: true }); toast('이 기기 내용을 올렸습니다', 'good'); }
+    } else {
+      toast('Gist를 만들고 연결했습니다', 'good');
+    }
+    gist.refresh();
+  } catch (e) {
+    gist.refresh();
+    toast(e.message || '연결에 실패했습니다', 'bad');
+  }
+});
+$('sync-push').addEventListener('click', async () => { await gist.push({ force: true }); toast('올렸습니다', 'good'); });
+$('sync-pull').addEventListener('click', async () => { if (await gist.pull()) await boot(true); });
+$('sync-unlink').addEventListener('click', async () => {
+  if (!await confirmBox('연결 해제', '이 브라우저에 저장된 토큰을 지웁니다. Gist와 카드 데이터는 그대로 남습니다.', '해제')) return;
+  gist.unlink();
+  toast('연결을 해제했습니다');
+});
+window.addEventListener('online', () => gist.refresh());
+window.addEventListener('offline', () => gist.refresh());
+// 탭을 닫기 전에 밀린 변경분을 마지막으로 밀어 올린다
+window.addEventListener('pagehide', () => { if (gist.linked) gist.push(); });
 
 /* 효과 토글 */
 function syncSwitch(el, on) { el.setAttribute('aria-checked', on ? 'true' : 'false'); }
@@ -3100,7 +3440,13 @@ $('nb-import').addEventListener('click', async () => {
    16. 시작
    ============================================================ */
 (async function () {
+  // 연결되어 있으면 로컬보다 클라우드가 최신일 수 있으니 먼저 받아온다
+  if (gist.linked) {
+    gist.refresh();
+    await gist.pull({ silent: true });
+  }
   await boot(false);
+  gist.refresh();
   bg.boot().then(() => { if (!bg.ok) $('gpu-note').textContent = '정적 배경 사용 중'; });
 })();
 </script>
@@ -3108,7 +3454,7 @@ $('nb-import').addEventListener('click', async () => {
 <!-- liquidGL 은 ES module 이라 type="module" 로 불러온다. 실패해도 CSS 유리로 폴백된다. -->
 <script type="module">
   try {
-    await import('https://cdn.jsdelivr.net/npm/liquid-gl@2.0.1/liquidGL.js');
+    await import('./vendor/liquidGL.js');
     if (window.__initGlass) window.__initGlass();
   } catch (e) {
     console.warn('liquidGL 로드 실패 — CSS 폴백 사용', e);
