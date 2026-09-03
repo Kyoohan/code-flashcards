@@ -1,0 +1,1625 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>코드 플래시카드</title>
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('fc_theme_v1');
+                var dark = t ? t === 'dark' : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                if (dark) document.documentElement.classList.add('dark');
+            } catch (e) {}
+        })();
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config = { darkMode: 'class' };</script>
+    <script src="https://cdn.jsdelivr.net/npm/diff@5.1.0/dist/diff.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/vs2015.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Source+Code+Pro&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+
+        pre::-webkit-scrollbar, textarea::-webkit-scrollbar, div::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
+        }
+
+        pre::-webkit-scrollbar-thumb, textarea::-webkit-scrollbar-thumb, div::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 4px;
+        }
+
+        pre::-webkit-scrollbar-track, textarea::-webkit-scrollbar-track, div::-webkit-scrollbar-track {
+            background: #1e1e1e;
+        }
+
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            width: 100%;
+            overflow-x: auto;
+            font-family: 'Source Code Pro', monospace;
+            font-size: 0.88rem;
+            line-height: 1.6;
+        }
+
+        .diff-correct {
+            background: #059669;
+            color: #fff;
+            padding: 2px 0;
+        }
+
+        .diff-error {
+            background: #dc2626;
+            color: #fff;
+            text-decoration: line-through;
+            padding: 2px 0;
+        }
+
+        .round-badge {
+            background: linear-gradient(135deg,#4f46e5,#3730a3);
+            color: #fff;
+            padding: 4px 12px;
+            border-radius: 9999px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            box-shadow: 0 4px 6px -1px rgba(79,70,229,0.3);
+        }
+
+        .shake {
+            animation: shake 0.35s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shake {
+            0%,100% { transform: translateX(0); }
+            10%,30%,50%,70%,90% { transform: translateX(-4px); }
+            20%,40%,60%,80% { transform: translateX(4px); }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.25s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        #blank-mode-container {
+            font-family: 'Source Code Pro', monospace;
+            font-size: 0.88rem;
+            line-height: 2;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 1rem 1.25rem;
+            border-radius: 0.75rem;
+            white-space: pre;
+            overflow-x: auto;
+        }
+
+        .blank-input {
+            display: inline-block;
+            background: #374151;
+            border: none;
+            border-bottom: 2px solid #818cf8;
+            color: #a5f3fc;
+            font-family: 'Source Code Pro', monospace;
+            font-size: 0.88rem;
+            line-height: 1.4;
+            padding: 0 4px;
+            margin: 0 8px;
+            outline: none;
+            border-radius: 3px 3px 0 0;
+            min-width: 80px;
+            vertical-align: baseline;
+            transition: border-color 0.15s, background 0.15s;
+        }
+
+            .blank-input:focus {
+                border-bottom-color: #6366f1;
+                background: #4b5563;
+            }
+
+            .blank-input.correct {
+                border-bottom-color: #34d399;
+                background: #064e3b;
+                color: #6ee7b7;
+                pointer-events: none;
+            }
+
+            .blank-input.wrong {
+                border-bottom-color: #f87171;
+                background: #7f1d1d;
+                color: #fca5a5;
+            }
+
+            .blank-input.filled {
+                border-bottom-color: #6ee7b7;
+                background: #064e3b;
+                color: #6ee7b7;
+                pointer-events: none;
+                cursor: default;
+            }
+
+        #inline-feedback {
+            font-size: 0.78rem;
+            min-height: 1.4em;
+            margin-top: 5px;
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+
+        /* 투명(transparent) 오류 수정: 어두운 테마 배경색(#1e1e1e) 강제 지정 */
+        .hljs {
+            background: #1e1e1e !important;
+            padding: 0 !important;
+        }
+
+        /* 주석의 이탤릭체 해제 및 가독성을 위한 스타일 설정 */
+        .hljs-comment, .hljs-quote {
+            font-style: normal !important;
+            color: #6a9955 !important;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-950 flex items-center justify-center min-h-screen py-6 text-gray-800 dark:text-gray-100">
+
+    <div class="w-full max-w-[96vw] mx-auto p-4">
+        <header class="text-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-gray-50">코드 플래시카드</h1>
+            <p id="page-subtitle" class="text-gray-600 dark:text-gray-400 mt-1 text-sm font-medium"></p>
+        </header>
+
+        <main>
+            <div class="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800">
+
+                <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <div class="flex items-center gap-1">
+                            <select id="deck-select" class="text-xs font-bold bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-700 dark:text-gray-200 rounded px-2 py-1 max-w-[160px] outline-none"></select>
+                            <button id="deck-add-btn" title="새 덱 추가" class="px-2 py-1 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 text-gray-600 rounded text-xs hover:bg-gray-200 dark:hover:bg-gray-700">＋</button>
+                            <button id="deck-rename-btn" title="덱 이름 변경" class="px-2 py-1 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 text-gray-600 rounded text-xs hover:bg-gray-200 dark:hover:bg-gray-700">✎</button>
+                            <button id="deck-delete-btn" title="덱 삭제" class="px-2 py-1 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 text-gray-600 rounded text-xs hover:bg-red-100 dark:hover:bg-red-900/40 hover:text-red-600">🗑</button>
+                        </div>
+                        <span id="round-badge" class="round-badge">Round 1</span>
+                        <div id="retry-badge" class="hidden px-2 py-1 bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-xs font-bold rounded border border-red-200 dark:border-red-800">오답 포함</div>
+                        <div id="blank-badge" class="hidden px-2 py-1 bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded border border-indigo-200 dark:border-indigo-800">빈칸 채우기</div>
+                        <div id="blank-progress-badge" class="hidden px-2 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-xs font-bold rounded border border-gray-200 dark:border-gray-700"></div>
+                        <div class="px-2 py-1 bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded border border-indigo-100 dark:border-indigo-900">
+                            잔여 <span id="stat-current">0</span>
+                        </div>
+                        <div class="px-2 py-1 bg-orange-50 dark:bg-orange-950/30 text-orange-600 dark:text-orange-300 text-xs font-bold rounded border border-orange-100 dark:border-orange-900">
+                            다음 <span id="stat-next">0</span>
+                        </div>
+                        <div id="resume-btn" class="hidden px-2 py-1 bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-300 text-xs font-bold rounded border border-green-200 dark:border-green-800 cursor-pointer hover:bg-green-200 dark:hover:bg-green-900/60">이어하기</div>
+                        <div id="fsa-status" style="display:none"></div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span id="stat-save" class="text-xs text-gray-400 dark:text-gray-500"></span>
+                        <span id="queue-counter" class="text-xs font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-3 py-1 rounded-full"></span>
+                        <button id="stats-btn" class="px-3 py-1 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 text-gray-600 rounded text-xs hover:bg-gray-200 dark:hover:bg-gray-700">통계</button>
+                        <button id="shuffle-btn" class="px-3 py-1 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 text-gray-600 rounded text-xs hover:bg-gray-200 dark:hover:bg-gray-700">섞기</button>
+                        <button id="reset-btn" class="px-3 py-1 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 text-gray-600 rounded text-xs hover:bg-gray-200 dark:hover:bg-gray-700">초기화</button>
+                        <button id="edit-btn" class="px-3 py-1 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-bold rounded text-xs hover:bg-indigo-100 dark:hover:bg-indigo-900/60">편집</button>
+                        <button id="export-btn" class="px-3 py-1 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 text-gray-600 rounded text-xs hover:bg-gray-200 dark:hover:bg-gray-700">내보내기</button>
+                        <label class="px-3 py-1 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 text-gray-600 rounded text-xs hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer">가져오기<input id="import-input" type="file" accept=".json" class="hidden"></label>
+                        <button id="theme-toggle-btn" class="px-3 py-1 bg-gray-100 dark:bg-gray-800 dark:text-gray-300 text-gray-600 rounded text-xs hover:bg-gray-200 dark:hover:bg-gray-700">다크모드</button>
+                    </div>
+                </div>
+
+                <div class="mb-5 p-4 bg-indigo-50 dark:bg-indigo-950/30 border-l-4 border-indigo-500 dark:border-indigo-600 rounded-r-lg">
+                    <p id="card-definition" class="text-gray-800 dark:text-gray-100 text-base font-medium whitespace-pre-wrap leading-relaxed"></p>
+                </div>
+
+                <div id="normal-mode" class="mb-4">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase block mb-1">Code Input</label>
+                    <textarea id="user-input"
+                              class="w-full h-64 p-4 bg-[#1e1e1e] text-[#d4d4d4] border border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 font-mono outline-none shadow-inner whitespace-pre overflow-x-auto"
+                              placeholder="정답 코드를 입력하세요..."></textarea>
+                </div>
+
+                <div id="blank-mode" class="hidden mb-2">
+                    <label class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase block mb-1">Fill in the Blanks</label>
+                    <div id="blank-mode-container"></div>
+                    <div id="inline-feedback" class="text-gray-400 pl-1"></div>
+                </div>
+
+                <div id="feedback-container" class="hidden mb-4 fade-in">
+                    <div id="feedback-box" class="p-4 rounded-xl border shadow-sm">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span id="feedback-icon" class="text-2xl"></span>
+                            <h2 id="feedback-title" class="text-xl font-bold"></h2>
+                        </div>
+                        <p id="feedback-desc" class="text-sm text-gray-700 dark:text-gray-300 font-medium mb-3"></p>
+                        <div id="diff-area" class="hidden">
+                            <div class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">비교 결과 (빨간색: 오타 / 초록색: 정답)</div>
+                            <div id="diff-content" class="font-mono text-sm bg-[#1e1e1e] p-3 rounded-lg overflow-x-auto text-white"></div>
+                        </div>
+                        <div id="correct-answer-area" class="hidden">
+                            <div class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">정답 코드</div>
+                            <pre><code id="correct-code-display" class="hljs"></code></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex gap-2">
+                    <button id="submit-btn"
+                            class="flex-1 bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold text-lg hover:bg-indigo-700 shadow-md transition-transform active:scale-95">
+                        확인 (Ctrl+Enter)
+                    </button>
+                    <button id="next-btn"
+                            class="hidden flex-1 bg-green-600 text-white px-6 py-3 rounded-xl font-bold text-lg hover:bg-green-700 shadow-md transition-transform active:scale-95 flex justify-center items-center gap-2">
+                        다음 문제 (Enter) <span class="text-xl">➔</span>
+                    </button>
+                    <button id="give-up-btn"
+                            class="w-auto px-4 bg-gray-200 dark:bg-gray-800 text-gray-600 dark:text-gray-300 rounded-xl font-bold hover:bg-gray-300 dark:hover:bg-gray-700 text-sm">
+                        정답 보기
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="editor-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div class="bg-white dark:bg-gray-900 w-full max-w-[90vw] h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+            <div class="p-4 border-b dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-900">
+                <h3 class="font-bold text-gray-800 dark:text-gray-100">문제 데이터 편집</h3>
+                <button id="close-editor-btn" class="p-1 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-full text-gray-500 dark:text-gray-400">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="flex flex-1 overflow-hidden">
+                <div class="w-1/3 border-r dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col">
+                    <div class="p-2 border-b dark:border-gray-800 flex justify-between items-center">
+                        <span class="text-xs font-bold text-gray-500 dark:text-gray-400">목록 (<span id="card-count">0</span>)</span>
+                        <button id="add-new-card-btn" class="text-xs bg-indigo-600 text-white px-2 py-1 rounded">추가</button>
+                    </div>
+                    <div class="p-2 border-b dark:border-gray-800">
+                        <input id="editor-search" type="text" placeholder="검색 (설명 또는 코드)" class="w-full text-xs px-2 py-1.5 border dark:border-gray-700 rounded-lg dark:bg-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 outline-none">
+                    </div>
+                    <div id="editor-list" class="flex-1 overflow-y-auto"></div>
+                    <div class="p-2 border-t dark:border-gray-800">
+                        <button id="restore-default-btn" class="w-full text-xs text-gray-400 dark:text-gray-500 underline hover:text-red-500 dark:hover:text-red-400">이 덱의 카드 전체 삭제</button>
+                    </div>
+                </div>
+                <div class="w-2/3 p-5 flex flex-col bg-gray-50 dark:bg-gray-950 overflow-hidden">
+                    <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 shrink-0">문제 설명 (줄바꿈 가능)</label>
+                    <textarea id="edit-def" class="w-full h-28 p-3 border dark:border-gray-700 rounded-lg text-sm mb-4 focus:ring-2 focus:ring-indigo-500 outline-none shrink-0 dark:bg-gray-800 dark:text-gray-100"></textarea>
+
+                    <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1 shrink-0">
+                        정답 코드
+                        <span class="ml-1 font-normal text-indigo-500">( {{빈칸}} 문법 사용 가능 )</span>
+                    </label>
+                    <textarea id="edit-term" class="w-full flex-1 p-3 border border-gray-600 rounded-lg font-mono text-sm bg-[#1e1e1e] text-[#d4d4d4] mb-2 focus:ring-2 focus:ring-indigo-500 outline-none whitespace-pre overflow-x-auto"></textarea>
+
+                    <div id="blank-preview-area" class="hidden mb-4 shrink-0 max-h-40 overflow-y-auto">
+                        <div class="text-xs font-bold text-gray-500 dark:text-gray-400 mb-1">빈칸 미리보기</div>
+                        <div id="blank-preview" class="font-mono text-xs bg-[#1e1e1e] text-gray-100 p-3 rounded-lg whitespace-pre hljs"></div>
+                    </div>
+                    <div class="flex justify-between shrink-0 mt-2">
+                        <button id="delete-card-btn" class="text-red-500 text-sm font-bold px-3 py-1 hover:bg-red-50 dark:hover:bg-red-950/40 rounded">삭제</button>
+                        <button id="save-card-btn" class="bg-green-600 text-white px-5 py-2 rounded font-bold hover:bg-green-700">저장</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="stats-modal" class="hidden fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div class="bg-white dark:bg-gray-900 w-full max-w-lg rounded-2xl shadow-2xl flex flex-col overflow-hidden max-h-[85vh]">
+            <div class="p-4 border-b dark:border-gray-800 flex justify-between items-center bg-gray-50 dark:bg-gray-900">
+                <h3 class="font-bold text-gray-800 dark:text-gray-100">학습 통계</h3>
+                <button id="close-stats-btn" class="p-1 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-full text-gray-500 dark:text-gray-400">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div id="stats-body" class="p-5 overflow-y-auto text-sm text-gray-700 dark:text-gray-200"></div>
+        </div>
+    </div>
+
+    <script>
+        'use strict';
+
+        // =================================================================
+        // 저장 키 & 유틸
+        // =================================================================
+        const DECK_LIST_KEY    = 'fc_deck_list_v1';
+        const ACTIVE_DECK_KEY  = 'fc_active_deck_v1';
+        const THEME_KEY        = 'fc_theme_v1';
+        const LEGACY_CARDS_KEY = 'fc_cards_v7';
+        const LEGACY_PROG_KEY  = 'fc_progress_v8';
+
+        const cardsKey    = id => `fc_cards_v1_${id}`;
+        const progressKey = id => `fc_progress_v1_${id}`;
+        const statsKey    = id => `fc_stats_v1_${id}`;
+
+        function genId(prefix) {
+            return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+        }
+
+        // =================================================================
+        // FSA (File System Access API) 영구 저장 레이어 - 전체 앱 상태(모든 덱) 백업
+        // =================================================================
+        let _fsaHandle = null;
+
+        function _idb(mode, key, val) {
+            return new Promise((res, rej) => {
+                const req = indexedDB.open('fc_fsa_v1', 1);
+                req.onupgradeneeded = e => e.target.result.createObjectStore('kv');
+                req.onsuccess = e => {
+                    const db = e.target.result;
+                    const tx = db.transaction('kv', mode);
+                    const st = tx.objectStore('kv');
+                    const r  = mode === 'readwrite' ? st.put(val, key) : st.get(key);
+                    r.onsuccess = ev => res(ev.target.result ?? null);
+                    r.onerror   = () => rej(r.error);
+                };
+                req.onerror = () => rej(req.error);
+            });
+        }
+
+        async function fsaConnect(isNew) {
+            if (!window.showSaveFilePicker) return null;
+            try {
+                if (isNew) {
+                    _fsaHandle = await window.showSaveFilePicker({
+                        suggestedName: 'flashcard_data.json',
+                        types: [{ description: 'JSON 데이터', accept: { 'application/json': ['.json'] } }],
+                    });
+                } else {
+                    [_fsaHandle] = await window.showOpenFilePicker({
+                        types: [{ description: 'JSON 데이터', accept: { 'application/json': ['.json'] } }],
+                    });
+                }
+                await _idb('readwrite', 'h', _fsaHandle).catch(() => {});
+                _setFsaUI('connected');
+                return _fsaHandle;
+            } catch { return null; }
+        }
+
+        async function _fsaRead() {
+            if (!_fsaHandle) return null;
+            try {
+                const txt = await (await _fsaHandle.getFile()).text();
+                return txt.trim() ? JSON.parse(txt) : {};
+            } catch { return null; }
+        }
+
+        async function _fsaWriteRaw(data) {
+            if (!_fsaHandle) return false;
+            try {
+                const perm = await _fsaHandle.queryPermission({ mode: 'readwrite' });
+                if (perm !== 'granted') return false;
+                const w = await _fsaHandle.createWritable();
+                await w.write(JSON.stringify(data, null, 2));
+                await w.close();
+                return true;
+            } catch { return false; }
+        }
+
+        async function fsaRestore() {
+            if (!window.showOpenFilePicker) { _setFsaUI('unsupported'); return null; }
+            const handle = await _idb('readonly', 'h').catch(() => null);
+            if (!handle) { _setFsaUI('no-file'); return null; }
+            _fsaHandle = handle;
+            const perm = await handle.queryPermission({ mode: 'readwrite' }).catch(() => 'denied');
+            if (perm === 'granted') {
+                const data = await _fsaRead();
+                if (data) { _setFsaUI('connected'); return data; }
+            }
+            _setFsaUI('need-perm');
+            return null;
+        }
+
+        function collectFullState() {
+            const decks = {};
+            for (const d of deckList) {
+                decks[d.id] = {
+                    cards: safeParse(localStorage.getItem(cardsKey(d.id)), []),
+                    progress: safeParse(localStorage.getItem(progressKey(d.id)), null),
+                    stats: safeParse(localStorage.getItem(statsKey(d.id)), []),
+                };
+            }
+            return { version: 2, deckList, activeDeckId, decks };
+        }
+
+        function applyFullState(data) {
+            if (!data || !Array.isArray(data.deckList) || data.deckList.length === 0) return false;
+            deckList = data.deckList;
+            persistDeckList();
+            activeDeckId = data.activeDeckId && deckList.find(d => d.id === data.activeDeckId)
+                ? data.activeDeckId : deckList[0].id;
+            localStorage.setItem(ACTIVE_DECK_KEY, activeDeckId);
+            for (const d of deckList) {
+                const s = (data.decks && data.decks[d.id]) || {};
+                localStorage.setItem(cardsKey(d.id), JSON.stringify(s.cards || []));
+                if (s.progress) localStorage.setItem(progressKey(d.id), JSON.stringify(s.progress));
+                localStorage.setItem(statsKey(d.id), JSON.stringify(s.stats || []));
+            }
+            return true;
+        }
+
+        async function fsaSaveAll() {
+            if (!_fsaHandle) return;
+            const ok = await _fsaWriteRaw(collectFullState());
+            if (ok) {
+                const t = new Date();
+                if (statSave) statSave.textContent =
+                    `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')} 저장됨`;
+            }
+        }
+
+        function safeParse(raw, fallback) {
+            if (!raw) return fallback;
+            try { return JSON.parse(raw); } catch (e) { return fallback; }
+        }
+
+        function _setFsaUI(state) {
+            const el = document.getElementById('fsa-status');
+            if (!el) return;
+            el.style.display = '';
+            el.className = 'px-2 py-1 text-xs font-bold rounded border select-none';
+            el.onclick = null;
+            switch (state) {
+                case 'connected':
+                    el.className += ' bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800 cursor-default';
+                    el.textContent = '파일 연결됨';
+                    break;
+                case 'need-perm':
+                    el.className += ' bg-yellow-50 dark:bg-yellow-950/40 text-yellow-700 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800 cursor-pointer';
+                    el.textContent = '파일 재연결 (클릭)';
+                    el.onclick = async () => {
+                        const p = await _fsaHandle.requestPermission({ mode: 'readwrite' }).catch(() => 'denied');
+                        if (p === 'granted') {
+                            const d = await _fsaRead();
+                            if (d) applyFullState(d);
+                            _setFsaUI('connected');
+                            init(true);
+                        }
+                    };
+                    break;
+                case 'unsupported':
+                    el.className += ' bg-gray-50 dark:bg-gray-800 text-gray-400 dark:text-gray-500 border-gray-200 dark:border-gray-700';
+                    el.textContent = 'Chrome/Edge 전용 기능';
+                    break;
+                case 'no-file':
+                default:
+                    el.className += ' bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-300 border-blue-200 dark:border-blue-800 cursor-pointer';
+                    el.textContent = '파일 연결하여 영구 저장';
+                    el.onclick = e => { e.stopPropagation(); _showFsaMenu(el); };
+            }
+        }
+
+        function _showFsaMenu(anchor) {
+            let pop = document.getElementById('_fsa_pop');
+            if (!pop) {
+                pop = document.createElement('div');
+                pop.id = '_fsa_pop';
+                pop.className = 'fixed z-[9999] bg-white dark:bg-gray-900 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-2 flex flex-col gap-1 text-sm min-w-[200px]';
+                document.body.appendChild(pop);
+            }
+            const r = anchor.getBoundingClientRect();
+            pop.style.cssText = `top:${r.bottom + 6 + scrollY}px;left:${r.left}px;display:block;`;
+            pop.innerHTML = `
+                <button id="_fsa_new" class="px-3 py-2 text-left rounded hover:bg-indigo-50 dark:hover:bg-gray-800 font-bold text-indigo-700 dark:text-indigo-300">새 파일 만들기</button>
+                <button id="_fsa_open" class="px-3 py-2 text-left rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300">기존 파일 열기</button>
+            `;
+            document.getElementById('_fsa_new').onclick = async () => {
+                pop.style.display = 'none';
+                const h = await fsaConnect(true);
+                if (h) await fsaSaveAll();
+            };
+            document.getElementById('_fsa_open').onclick = async () => {
+                pop.style.display = 'none';
+                const h = await fsaConnect(false);
+                if (h) {
+                    const d = await _fsaRead();
+                    if (d) applyFullState(d);
+                    clearProgress();
+                    init(true);
+                }
+            };
+            requestAnimationFrame(() => {
+                const close = ev => {
+                    if (!pop.contains(ev.target) && ev.target !== anchor) {
+                        pop.style.display = 'none';
+                        document.removeEventListener('click', close);
+                    }
+                };
+                document.addEventListener('click', close);
+            });
+        }
+
+        // =================================================================
+        // 빈칸 문법 파서 ( {{정답}} )
+        // =================================================================
+        function parseTerm(term) {
+            const segments = [];
+            let i = 0, last = 0, hasBlank = false;
+            while (i < term.length) {
+                if (term[i] === '{' && i + 1 < term.length && term[i + 1] === '{') {
+                    if (i > last) segments.push({ text: term.slice(last, i), isBlank: false });
+                    let j = i + 2, depth = 0;
+                    while (j < term.length) {
+                        if (term[j] === '{') {
+                            depth++; j++;
+                        } else if (term[j] === '}') {
+                            if (depth > 0) {
+                                depth--; j++;
+                            } else if (j + 1 < term.length && term[j + 1] === '}') {
+                                const content = term.slice(i + 2, j);
+                                segments.push({ text: content, isBlank: true, answer: content });
+                                hasBlank = true;
+                                last = j + 2; i = j + 2;
+                                break;
+                            } else { j++; }
+                        } else { j++; }
+                    }
+                    if (j >= term.length) i++;
+                } else { i++; }
+            }
+            if (last < term.length) segments.push({ text: term.slice(last), isBlank: false });
+            return { isBlank: hasBlank, segments };
+        }
+
+        function stripBlanks(term) {
+            const { segments } = parseTerm(term);
+            return segments.map(s => s.text).join('');
+        }
+
+        function getBlankToken(i) {
+            let str = 'BLANKFIELD';
+            let n = i;
+            do {
+                str += String.fromCharCode(65 + (n % 26));
+                n = Math.floor(n / 26);
+            } while (n > 0);
+            return str + 'TOKEN';
+        }
+
+        // =================================================================
+        // 덱(카드 세트) 관리
+        // =================================================================
+        let deckList     = [];
+        let activeDeckId = null;
+
+        function loadDeckListFromStorage() {
+            deckList = safeParse(localStorage.getItem(DECK_LIST_KEY), []);
+            if (!Array.isArray(deckList)) deckList = [];
+        }
+
+        function persistDeckList() {
+            localStorage.setItem(DECK_LIST_KEY, JSON.stringify(deckList));
+        }
+
+        function getActiveDeck() {
+            return deckList.find(d => d.id === activeDeckId) || null;
+        }
+
+        function migrateLegacyData() {
+            loadDeckListFromStorage();
+            if (deckList.length > 0) return;
+
+            const rawLegacyCards = localStorage.getItem(LEGACY_CARDS_KEY);
+            if (!rawLegacyCards) return;
+
+            const legacyCards = safeParse(rawLegacyCards, []);
+            if (!Array.isArray(legacyCards) || legacyCards.length === 0) return;
+
+            const deckId = genId('deck');
+            const migratedCards = legacyCards.map(c => ({ id: genId('card'), definition: c.definition, term: c.term }));
+            const idAt = migratedCards.map(c => c.id);
+
+            deckList = [{
+                id: deckId,
+                name: 'AP프로그래밍과 문제해결',
+                subtitle: '2학년 1학기 중간고사 대비',
+                createdAt: Date.now(),
+            }];
+            persistDeckList();
+            localStorage.setItem(cardsKey(deckId), JSON.stringify(migratedCards));
+
+            const p = safeParse(localStorage.getItem(LEGACY_PROG_KEY), null);
+            if (p) {
+                const remapIdxArr = arr => (arr || []).map(i => idAt[i]).filter(Boolean);
+                const remapMapArr = arr => (arr || []).map(([i, v]) => [idAt[i], v]).filter(([id]) => id);
+                localStorage.setItem(progressKey(deckId), JSON.stringify({
+                    currentRound: p.currentRound || 1,
+                    activeQueue: remapIdxArr(p.activeQueue),
+                    nextRoundMap: remapMapArr(p.nextRoundMap),
+                    prevWrongMap: remapMapArr(p.prevWrongMap),
+                    currentCardId: idAt[p.currentCardIndex] || null,
+                    isRetryMode: !!p.isRetryMode,
+                    savedAt: p.savedAt || Date.now(),
+                }));
+            }
+
+            activeDeckId = deckId;
+            localStorage.setItem(ACTIVE_DECK_KEY, deckId);
+            localStorage.removeItem(LEGACY_CARDS_KEY);
+            localStorage.removeItem(LEGACY_PROG_KEY);
+        }
+
+        function ensureAtLeastOneDeck() {
+            if (deckList.length > 0) return;
+            const deckId = genId('deck');
+            deckList = [{ id: deckId, name: '새 덱', subtitle: '', createdAt: Date.now() }];
+            persistDeckList();
+            localStorage.setItem(cardsKey(deckId), JSON.stringify([]));
+        }
+
+        function renderDeckSelector() {
+            deckSelect.innerHTML = '';
+            deckList.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d.id;
+                opt.textContent = d.name;
+                if (d.id === activeDeckId) opt.selected = true;
+                deckSelect.appendChild(opt);
+            });
+        }
+
+        function updateDeckHeader() {
+            const deck = getActiveDeck();
+            if (!deck) return;
+            pageSubtitleEl.textContent = deck.subtitle ? `${deck.name} · ${deck.subtitle}` : deck.name;
+            document.title = `${deck.name} - 코드 플래시카드`;
+        }
+
+        // =================================================================
+        // 현재 덱의 학습 상태
+        // =================================================================
+        let allCards         = [];
+        let cardMap          = new Map();
+        let currentRound     = 1;
+        let activeQueue      = [];
+        let nextRoundMap     = new Map();
+        let prevWrongMap     = new Map();
+        let currentCardId    = null;
+        let isRetryMode      = false;
+        let statsMap         = new Map();
+
+        let bs = {
+            inputs:    [],
+            lockedSet: new Set(),
+            wrongSet:  new Set(),
+            frozen:    new Set(),
+            openCount: 0,
+        };
+
+        const pageSubtitleEl      = document.getElementById('page-subtitle');
+        const deckSelect          = document.getElementById('deck-select');
+        const definitionEl        = document.getElementById('card-definition');
+        const userInputEl         = document.getElementById('user-input');
+        const submitBtn           = document.getElementById('submit-btn');
+        const nextBtn             = document.getElementById('next-btn');
+        const giveUpBtn           = document.getElementById('give-up-btn');
+        const feedbackContainer   = document.getElementById('feedback-container');
+        const feedbackBox         = document.getElementById('feedback-box');
+        const feedbackIcon        = document.getElementById('feedback-icon');
+        const feedbackTitle       = document.getElementById('feedback-title');
+        const feedbackDesc        = document.getElementById('feedback-desc');
+        const diffArea            = document.getElementById('diff-area');
+        const diffContent         = document.getElementById('diff-content');
+        const correctAnswerArea   = document.getElementById('correct-answer-area');
+        const correctCodeDisplay  = document.getElementById('correct-code-display');
+        const roundBadge          = document.getElementById('round-badge');
+        const queueCounter        = document.getElementById('queue-counter');
+        const statCurrent         = document.getElementById('stat-current');
+        const statNext            = document.getElementById('stat-next');
+        const statSave            = document.getElementById('stat-save');
+        const retryBadge          = document.getElementById('retry-badge');
+        const blankBadge          = document.getElementById('blank-badge');
+        const blankProgressBadge  = document.getElementById('blank-progress-badge');
+        const normalMode          = document.getElementById('normal-mode');
+        const blankMode           = document.getElementById('blank-mode');
+        const blankContainer      = document.getElementById('blank-mode-container');
+        const inlineFeedback      = document.getElementById('inline-feedback');
+        const resumeBtn           = document.getElementById('resume-btn');
+        const themeToggleBtn      = document.getElementById('theme-toggle-btn');
+
+        function _serMap(m) {
+            return Array.from(m.entries()).map(([k, v]) => [k, v === 'all' ? 'all' : Array.from(v)]);
+        }
+        function _deserMap(arr) {
+            return new Map((arr || []).map(([k, v]) => [k, v === 'all' ? 'all' : new Set(v)]));
+        }
+
+        function loadCardsForActiveDeck() {
+            allCards = safeParse(localStorage.getItem(cardsKey(activeDeckId)), []);
+            if (!Array.isArray(allCards)) allCards = [];
+            cardMap = new Map(allCards.map(c => [c.id, c]));
+        }
+
+        function saveCards() {
+            localStorage.setItem(cardsKey(activeDeckId), JSON.stringify(allCards));
+            cardMap = new Map(allCards.map(c => [c.id, c]));
+            fsaSaveAll();
+        }
+
+        function loadStats() {
+            statsMap = new Map(safeParse(localStorage.getItem(statsKey(activeDeckId)), []));
+        }
+        function saveStats() {
+            localStorage.setItem(statsKey(activeDeckId), JSON.stringify(Array.from(statsMap.entries())));
+        }
+        function recordAttempt(cardId, correct) {
+            if (!cardId) return;
+            const s = statsMap.get(cardId) || { attempts: 0, correct: 0, wrong: 0 };
+            s.attempts++;
+            if (correct) s.correct++; else s.wrong++;
+            statsMap.set(cardId, s);
+            saveStats();
+        }
+
+        function saveProgress() {
+            localStorage.setItem(progressKey(activeDeckId), JSON.stringify({
+                currentRound, activeQueue,
+                nextRoundMap: _serMap(nextRoundMap),
+                prevWrongMap: _serMap(prevWrongMap),
+                currentCardId, isRetryMode, savedAt: Date.now(),
+            }));
+            const t = new Date();
+            statSave.textContent = `${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')} 저장됨`;
+            fsaSaveAll();
+        }
+
+        function loadProgress() {
+            const raw = localStorage.getItem(progressKey(activeDeckId));
+            if (!raw) return null;
+            try {
+                const s = JSON.parse(raw);
+                s.nextRoundMap = _deserMap(s.nextRoundMap);
+                s.prevWrongMap = _deserMap(s.prevWrongMap);
+                return s;
+            } catch (e) { return null; }
+        }
+
+        function clearProgress() {
+            localStorage.removeItem(progressKey(activeDeckId));
+            statSave.textContent = '-';
+        }
+
+        // 카드 추가/삭제로 인덱스가 아닌 id를 쓰기 때문에, 카드 목록이 바뀌어도
+        // 기존 진행 상황(activeQueue/nextRoundMap 등)이 엉뚱한 카드를 가리키지 않도록 정리한다.
+        function reconcileProgress() {
+            const validIds = new Set(allCards.map(c => c.id));
+            activeQueue = activeQueue.filter(id => validIds.has(id));
+            for (const id of Array.from(nextRoundMap.keys())) if (!validIds.has(id)) nextRoundMap.delete(id);
+            for (const id of Array.from(prevWrongMap.keys())) if (!validIds.has(id)) prevWrongMap.delete(id);
+            for (const id of Array.from(statsMap.keys())) if (!validIds.has(id)) statsMap.delete(id);
+        }
+
+        function onCardsMutated() {
+            cardMap = new Map(allCards.map(c => [c.id, c]));
+            if (allCards.length === 0) { clearProgress(); showEmptyState(); return; }
+
+            if (!currentCardId) {
+                // 학습 세션이 아직 시작되지 않았거나(빈 덱에 첫 카드 추가) 직전 라운드가 완전히
+                // 끝난 상태(모든 학습 완료 후 카드 추가) -> 지금 있는 카드 전체로 새로 시작한다.
+                startRound(1, allCards.map(c => c.id));
+                return;
+            }
+
+            // 진행 중인 라운드에 새로 추가된 카드는 activeQueue/nextRoundMap/prevWrongMap
+            // 어디에도 없으므로, 지금 알고 있는 id 집합과 비교해 빠진 카드를 현재 대기열에 편입한다.
+            // (그렇지 않으면 라운드 중간에 추가한 카드가 한 번도 출제되지 않고 넘어간다.)
+            const knownIds = new Set([
+                ...activeQueue,
+                ...nextRoundMap.keys(),
+                ...prevWrongMap.keys(),
+                currentCardId,
+            ]);
+            const newIds = allCards.map(c => c.id).filter(id => !knownIds.has(id));
+
+            reconcileProgress();
+            if (newIds.length > 0) activeQueue.push(...newIds);
+
+            if (!cardMap.has(currentCardId)) {
+                if (activeQueue.length) { currentCardId = activeQueue[0]; displayCard(); }
+                else { loadNextCard(); }
+            }
+            updateStats();
+            saveProgress();
+        }
+
+        async function init(forceNew = false) {
+            migrateLegacyData();
+            loadDeckListFromStorage();
+            ensureAtLeastOneDeck();
+            if (!activeDeckId || !deckList.find(d => d.id === activeDeckId)) {
+                activeDeckId = localStorage.getItem(ACTIVE_DECK_KEY);
+                if (!activeDeckId || !deckList.find(d => d.id === activeDeckId)) activeDeckId = deckList[0].id;
+            }
+            localStorage.setItem(ACTIVE_DECK_KEY, activeDeckId);
+
+            if (!forceNew) {
+                const fsaData = await fsaRestore();
+                if (fsaData && applyFullState(fsaData)) {
+                    loadDeckListFromStorage();
+                    if (!deckList.find(d => d.id === activeDeckId)) activeDeckId = deckList[0].id;
+                }
+            }
+
+            loadCardsForActiveDeck();
+            loadStats();
+            renderDeckSelector();
+            updateDeckHeader();
+
+            if (allCards.length === 0) { showEmptyState(); return; }
+            reconcileProgress();
+
+            resumeBtn.classList.add('hidden');
+            if (!forceNew) {
+                const prog = loadProgress();
+                if (prog && prog.activeQueue && prog.activeQueue.length > 0) {
+                    resumeBtn.classList.remove('hidden');
+                    resumeBtn.onclick = () => {
+                        resumeBtn.classList.add('hidden');
+                        currentRound  = prog.currentRound;
+                        activeQueue   = prog.activeQueue;
+                        nextRoundMap  = prog.nextRoundMap;
+                        prevWrongMap  = prog.prevWrongMap;
+                        currentCardId = prog.currentCardId;
+                        isRetryMode   = prog.isRetryMode;
+                        reconcileProgress();
+                        if (currentCardId && cardMap.has(currentCardId)) displayCard();
+                        else loadNextCard();
+                        updateStats();
+                    };
+                }
+            }
+            startRound(1, allCards.map(c => c.id));
+        }
+
+        function showEmptyState() {
+            definitionEl.innerHTML = `<span class="text-gray-400">등록된 카드가 없습니다.<br>우측 <strong>편집</strong> 버튼으로 카드를 추가하세요.</span>`;
+            [userInputEl, submitBtn, nextBtn, giveUpBtn].forEach(el => el.classList.add('hidden'));
+            blankMode.classList.add('hidden');
+            normalMode.classList.remove('hidden');
+            roundBadge.textContent = 'Round 1';
+            queueCounter.textContent = '0문제 남음';
+            statCurrent.textContent = statNext.textContent = '0';
+        }
+
+        function startRound(roundNum, ids) {
+            currentRound = roundNum;
+            activeQueue  = [...ids];
+            prevWrongMap = new Map(nextRoundMap);
+            nextRoundMap.clear();
+            if (!activeQueue.length) { alert('모든 카드를 마스터했습니다!'); return; }
+            loadNextCard();
+        }
+
+        function loadNextCard() {
+            if (!activeQueue.length) {
+                const nextIds = Array.from(nextRoundMap.keys());
+                if (nextIds.length > 0) {
+                    alert(`${currentRound}라운드 종료!\n틀린 문제 ${nextIds.length}개가 다음 라운드로 넘어갑니다.`);
+                    startRound(currentRound + 1, nextIds);
+                } else {
+                    finishAll();
+                }
+                return;
+            }
+            currentCardId = activeQueue[0];
+            isRetryMode   = false;
+            displayCard();
+        }
+
+        function displayCard() {
+            const card = cardMap.get(currentCardId);
+            if (!card) { loadNextCard(); return; }
+            const parsed = parseTerm(card.term);
+
+            definitionEl.textContent = card.definition;
+            feedbackContainer.classList.add('hidden');
+            retryBadge.classList.add('hidden');
+            submitBtn.classList.remove('hidden');
+            nextBtn.classList.add('hidden');
+            giveUpBtn.classList.remove('hidden');
+
+            if (parsed.isBlank) {
+                blankBadge.classList.remove('hidden');
+                normalMode.classList.add('hidden');
+                blankMode.classList.remove('hidden');
+
+                const prev = prevWrongMap.get(currentCardId);
+                const openSet = (prev instanceof Set) ? prev : null;
+                renderBlankMode(parsed.segments, openSet);
+            } else {
+                blankBadge.classList.add('hidden');
+                blankProgressBadge.classList.add('hidden');
+                blankMode.classList.add('hidden');
+                normalMode.classList.remove('hidden');
+                userInputEl.value    = '';
+                userInputEl.disabled = false;
+                userInputEl.className = userInputEl.className
+                    .replace(/ring-red-500|border-red-500|ring-green-500|border-green-500/g, '');
+                userInputEl.focus();
+            }
+
+            updateStats();
+            saveProgress();
+        }
+
+        function renderBlankMode(segments, openSet) {
+            blankContainer.innerHTML = '';
+            inlineFeedback.textContent = '';
+            bs = { inputs: [], lockedSet: new Set(), wrongSet: new Set(), frozen: new Set(), openCount: 0 };
+
+            let fullCode = '';
+            segments.forEach((seg, i) => {
+                fullCode += seg.isBlank ? getBlankToken(i) : seg.text;
+            });
+
+            let highlighted = fullCode;
+            try { highlighted = hljs.highlightAuto(fullCode).value; } catch (e) {}
+
+            let blankIdx = 0;
+            segments.forEach((seg, i) => {
+                if (!seg.isBlank) return;
+                const idx      = blankIdx++;
+                const isFrozen = openSet !== null && !openSet.has(idx);
+
+                const safeAnswer = seg.answer.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const width = Math.max(80, seg.answer.length * 11) + 'px';
+
+                let inputHtml;
+                if (isFrozen) {
+                    bs.frozen.add(idx);
+                    bs.lockedSet.add(idx);
+                    inputHtml = `<input type="text" class="blank-input filled" data-idx="${idx}" data-answer="${safeAnswer}" value="${safeAnswer}" disabled style="width:${width}">`;
+                } else {
+                    bs.openCount++;
+                    inputHtml = `<input type="text" class="blank-input" data-idx="${idx}" data-answer="${safeAnswer}" style="width:${width}">`;
+                }
+
+                const token = getBlankToken(i);
+                highlighted = highlighted.split(token).join(inputHtml);
+            });
+
+            blankContainer.innerHTML = highlighted;
+
+            blankContainer.querySelectorAll('.blank-input').forEach(inp => {
+                bs.inputs.push(inp);
+                if (!inp.disabled) inp.addEventListener('keydown', onBlankKeydown);
+            });
+
+            updateBlankProgressBadge();
+            const first = bs.inputs.find(i => !i.disabled);
+            if (first) first.focus();
+
+            if (bs.openCount === 0) finishBlankCard(false);
+        }
+
+        function onBlankKeydown(e) {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            // 마지막 빈칸을 맞히면 finishBlankCard()가 동기적으로 다음-문제 버튼을 보이고 포커스를 옮기는데,
+            // 이 keydown 이벤트가 그대로 document까지 버블링되면 동일한 Enter 입력이
+            // "다음 문제로 이동" 리스너까지 즉시 트리거해 피드백 화면을 건너뛰게 된다. 버블링을 막아 분리한다.
+            e.stopPropagation();
+
+            const inp    = e.target;
+            const idx    = parseInt(inp.dataset.idx);
+            const answer = inp.dataset.answer;
+
+            if (bs.lockedSet.has(idx)) return;
+
+            if (normalize(inp.value) === normalize(answer)) {
+                inp.classList.remove('wrong');
+                inp.classList.add('correct');
+                inp.disabled = true;
+                bs.lockedSet.add(idx);
+                recordAttempt(currentCardId, true);
+
+                showInlineFeedback('correct', '정답');
+                updateBlankProgressBadge();
+
+                const next = bs.inputs.find(i => !i.disabled);
+                if (next) {
+                    next.focus();
+                } else {
+                    finishBlankCard(bs.wrongSet.size > 0);
+                }
+            } else {
+                inp.classList.add('wrong');
+                inp.value = '';
+                bs.wrongSet.add(idx);
+                isRetryMode = true;
+                retryBadge.classList.remove('hidden');
+                nextRoundMap.set(currentCardId, new Set(bs.wrongSet));
+                recordAttempt(currentCardId, false);
+                showInlineFeedback('wrong', '틀렸습니다. 다시 시도하세요.');
+                updateStats();
+                saveProgress();
+                inp.focus();
+            }
+        }
+
+        function finishBlankCard(hadWrong) {
+            if (!hadWrong) nextRoundMap.delete(currentCardId);
+
+            inlineFeedback.textContent = '';
+            feedbackContainer.classList.remove('hidden');
+
+            if (hadWrong) {
+                feedbackBox.className     = 'p-4 rounded-xl border shadow-sm bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800';
+                feedbackIcon.innerHTML    = '오답';
+                feedbackTitle.textContent = '일부 오답';
+                feedbackTitle.className   = 'text-xl font-bold text-orange-600 dark:text-orange-400';
+                feedbackDesc.textContent  = '틀린 빈칸이 다음 라운드에 다시 출제됩니다.';
+            } else {
+                feedbackBox.className     = 'p-4 rounded-xl border shadow-sm bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800';
+                feedbackIcon.innerHTML    = '정답';
+                feedbackTitle.textContent = '전부 정답!';
+                feedbackTitle.className   = 'text-xl font-bold text-green-700 dark:text-green-400';
+                feedbackDesc.textContent  = isRetryMode ? '오답 기록이 있지만 이번엔 모두 맞혔습니다.' : '완벽합니다! 마스터했습니다.';
+            }
+            diffArea.classList.add('hidden');
+            correctAnswerArea.classList.add('hidden');
+            submitBtn.classList.add('hidden');
+            giveUpBtn.classList.add('hidden');
+            nextBtn.classList.remove('hidden');
+            nextBtn.focus();
+
+            updateStats();
+            saveProgress();
+        }
+
+        function showInlineFeedback(type, msg) {
+            inlineFeedback.textContent = msg;
+            inlineFeedback.className = type === 'correct'
+                ? 'text-green-400 pl-1 text-xs font-bold'
+                : 'text-red-400 pl-1 text-xs font-bold';
+            if (type === 'correct') setTimeout(() => { inlineFeedback.textContent = ''; }, 700);
+        }
+
+        function updateBlankProgressBadge() {
+            const done = bs.inputs.filter(i => bs.lockedSet.has(parseInt(i.dataset.idx)) && !bs.frozen.has(parseInt(i.dataset.idx))).length;
+            blankProgressBadge.textContent = `${done} / ${bs.openCount} 완료`;
+            blankProgressBadge.classList.remove('hidden');
+        }
+
+        function normalize(str) {
+            return str
+                .replace(/\r\n/g, '\n')
+                .replace(/"/g, "'")
+                .split('\n')
+                .map(line => line.trim().replace(/\s+/g, ''))
+                .filter(line => line.length > 0)
+                .join('\n');
+        }
+
+        function checkAnswerNormal() {
+            const card = cardMap.get(currentCardId);
+            const typed = normalize(userInputEl.value);
+            const answer = normalize(card.term);
+
+            feedbackContainer.classList.remove('hidden');
+
+            if (typed === answer) {
+                recordAttempt(currentCardId, true);
+                feedbackBox.className     = 'p-4 rounded-xl border shadow-sm bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800';
+                feedbackIcon.innerHTML    = '정답';
+                feedbackTitle.textContent = '정답입니다!';
+                feedbackTitle.className   = 'text-xl font-bold text-green-700 dark:text-green-400';
+                feedbackDesc.textContent  = isRetryMode ? '오답 기록이 있어 다음 라운드에 다시 출제됩니다.' : '완벽합니다! 마스터했습니다.';
+                diffArea.classList.add('hidden');
+                correctAnswerArea.classList.add('hidden');
+
+                if (isRetryMode) nextRoundMap.set(currentCardId, 'all');
+                else nextRoundMap.delete(currentCardId);
+
+                userInputEl.disabled = true;
+                submitBtn.classList.add('hidden');
+                giveUpBtn.classList.add('hidden');
+                nextBtn.classList.remove('hidden');
+                nextBtn.focus();
+            } else {
+                recordAttempt(currentCardId, false);
+                feedbackBox.className     = 'p-4 rounded-xl border shadow-sm bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800 shake';
+                feedbackIcon.innerHTML    = '오답';
+                feedbackTitle.textContent = '틀렸습니다!';
+                feedbackTitle.className   = 'text-xl font-bold text-red-600 dark:text-red-400';
+                feedbackDesc.textContent  = '수정 후 다시 시도하세요.';
+
+                const diff = Diff.diffLines(card.term, userInputEl.value, { newlineIsToken: true });
+                diffContent.innerHTML = '';
+                diff.forEach(part => {
+                    const span = document.createElement('span');
+                    if      (part.added)   span.className = 'diff-error';
+                    else if (part.removed) span.className = 'diff-correct';
+                    span.appendChild(document.createTextNode(part.value));
+                    diffContent.appendChild(span);
+                });
+                diffArea.classList.remove('hidden');
+                correctAnswerArea.classList.add('hidden');
+
+                isRetryMode = true;
+                retryBadge.classList.remove('hidden');
+                nextRoundMap.set(currentCardId, 'all');
+                userInputEl.disabled = false;
+                userInputEl.focus();
+            }
+
+            updateStats();
+            saveProgress();
+        }
+
+        function giveUp() {
+            const card   = cardMap.get(currentCardId);
+            const parsed = parseTerm(card.term);
+
+            if (parsed.isBlank) {
+                bs.inputs.forEach(inp => {
+                    const idx = parseInt(inp.dataset.idx);
+                    if (!bs.lockedSet.has(idx)) {
+                        inp.value    = inp.dataset.answer;
+                        inp.disabled = true;
+                        inp.classList.add('correct');
+                        bs.lockedSet.add(idx);
+                        bs.wrongSet.add(idx);
+                        recordAttempt(currentCardId, false);
+                    }
+                });
+                if (bs.wrongSet.size > 0) nextRoundMap.set(currentCardId, new Set(bs.wrongSet));
+            } else {
+                userInputEl.disabled = true;
+                nextRoundMap.set(currentCardId, 'all');
+                recordAttempt(currentCardId, false);
+            }
+
+            feedbackContainer.classList.remove('hidden');
+            feedbackBox.className     = 'p-4 rounded-xl border shadow-sm bg-yellow-50 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800';
+            feedbackIcon.innerHTML    = '확인';
+            feedbackTitle.textContent = '정답 확인';
+            feedbackTitle.className   = 'text-xl font-bold text-yellow-700 dark:text-yellow-400';
+            feedbackDesc.textContent  = '다음 라운드에 다시 출제됩니다.';
+            diffArea.classList.add('hidden');
+            correctAnswerArea.classList.remove('hidden');
+
+            try {
+                correctCodeDisplay.innerHTML = hljs.highlightAuto(stripBlanks(card.term)).value;
+            } catch (e) {
+                correctCodeDisplay.textContent = stripBlanks(card.term);
+            }
+
+            submitBtn.classList.add('hidden');
+            giveUpBtn.classList.add('hidden');
+            nextBtn.classList.remove('hidden');
+            nextBtn.focus();
+
+            updateStats();
+            saveProgress();
+        }
+
+        function handleNext() {
+            activeQueue.shift();
+            loadNextCard();
+        }
+
+        function finishAll() {
+            currentCardId = null;
+            clearProgress();
+            definitionEl.innerHTML = `<div class="text-center py-8"><h2 class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">모든 학습 완료!</h2><p class="mt-2 text-gray-500 dark:text-gray-400 text-sm">완벽하게 암기하셨습니다.</p></div>`;
+            [userInputEl, submitBtn, nextBtn, giveUpBtn].forEach(el => el.classList.add('hidden'));
+            feedbackContainer.classList.add('hidden');
+            blankMode.classList.add('hidden');
+            blankProgressBadge.classList.add('hidden');
+            updateStats();
+            roundBadge.textContent = 'Clear';
+        }
+
+        function updateStats() {
+            roundBadge.textContent   = `Round ${currentRound}`;
+            queueCounter.textContent = `${activeQueue.length}문제 남음`;
+            statCurrent.textContent  = activeQueue.length;
+            statNext.textContent     = nextRoundMap.size;
+        }
+
+        // =================================================================
+        // 학습 통계 모달
+        // =================================================================
+        function renderStats() {
+            const body = document.getElementById('stats-body');
+            body.innerHTML = '';
+
+            let totalAttempts = 0, totalCorrect = 0;
+            const rows = allCards.map(card => {
+                const s = statsMap.get(card.id) || { attempts: 0, correct: 0, wrong: 0 };
+                totalAttempts += s.attempts;
+                totalCorrect  += s.correct;
+                return { card, s, rate: s.attempts ? s.correct / s.attempts : null };
+            });
+            const overallRate = totalAttempts ? Math.round((totalCorrect / totalAttempts) * 100) : 0;
+
+            const summary = document.createElement('div');
+            summary.className = 'mb-5';
+            const summaryTop = document.createElement('div');
+            summaryTop.className = 'flex items-baseline gap-2 mb-1';
+            const bigPct = document.createElement('span');
+            bigPct.className = 'text-3xl font-bold text-indigo-600 dark:text-indigo-400';
+            bigPct.textContent = `${overallRate}%`;
+            const bigLabel = document.createElement('span');
+            bigLabel.className = 'text-xs text-gray-400 dark:text-gray-500';
+            bigLabel.textContent = `전체 정답률 (총 ${totalAttempts}회 시도)`;
+            summaryTop.append(bigPct, bigLabel);
+            const track = document.createElement('div');
+            track.className = 'w-full h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden';
+            const bar = document.createElement('div');
+            bar.className = 'h-full bg-indigo-500';
+            bar.style.width = `${overallRate}%`;
+            track.appendChild(bar);
+            summary.append(summaryTop, track);
+            body.appendChild(summary);
+
+            const listTitle = document.createElement('div');
+            listTitle.className = 'text-xs font-bold text-gray-500 dark:text-gray-400 mb-2 uppercase';
+            listTitle.textContent = '취약 카드 TOP 8';
+            body.appendChild(listTitle);
+
+            const weak = rows
+                .filter(r => r.s.attempts > 0)
+                .sort((a, b) => (a.rate - b.rate) || (b.s.wrong - a.s.wrong))
+                .slice(0, 8);
+
+            if (weak.length === 0) {
+                const empty = document.createElement('p');
+                empty.className = 'text-gray-400 dark:text-gray-500 text-xs';
+                empty.textContent = '아직 시도 기록이 없습니다.';
+                body.appendChild(empty);
+                return;
+            }
+
+            const list = document.createElement('div');
+            list.className = 'flex flex-col gap-2';
+            weak.forEach(({ card, s, rate }) => {
+                const pct = Math.round(rate * 100);
+                const row = document.createElement('div');
+                row.className = 'p-2 rounded-lg border border-gray-100 dark:border-gray-800';
+
+                const label = document.createElement('div');
+                label.className = 'flex justify-between text-xs mb-1';
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'truncate pr-2 text-gray-700 dark:text-gray-300';
+                nameSpan.textContent = card.definition.substring(0, 40);
+                const pctSpan = document.createElement('span');
+                pctSpan.className = 'shrink-0 font-bold ' + (pct < 50 ? 'text-red-500' : 'text-orange-500');
+                pctSpan.textContent = `${pct}% (${s.correct}/${s.attempts})`;
+                label.append(nameSpan, pctSpan);
+
+                const barTrack = document.createElement('div');
+                barTrack.className = 'w-full h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden';
+                const barFill = document.createElement('div');
+                barFill.className = 'h-full ' + (pct < 50 ? 'bg-red-400' : 'bg-orange-400');
+                barFill.style.width = `${pct}%`;
+                barTrack.appendChild(barFill);
+
+                row.append(label, barTrack);
+                list.appendChild(row);
+            });
+            body.appendChild(list);
+        }
+
+        document.getElementById('stats-btn').addEventListener('click', () => {
+            renderStats();
+            document.getElementById('stats-modal').classList.remove('hidden');
+        });
+        document.getElementById('close-stats-btn').addEventListener('click', () => {
+            document.getElementById('stats-modal').classList.add('hidden');
+        });
+
+        // =================================================================
+        // 다크모드
+        // =================================================================
+        function syncThemeButtonLabel() {
+            themeToggleBtn.textContent = document.documentElement.classList.contains('dark') ? '라이트모드' : '다크모드';
+        }
+        syncThemeButtonLabel();
+        themeToggleBtn.addEventListener('click', () => {
+            const next = !document.documentElement.classList.contains('dark');
+            document.documentElement.classList.toggle('dark', next);
+            localStorage.setItem(THEME_KEY, next ? 'dark' : 'light');
+            syncThemeButtonLabel();
+        });
+
+        // =================================================================
+        // 이벤트 바인딩 - 학습 화면
+        // =================================================================
+        submitBtn.addEventListener('click', () => {
+            const parsed = parseTerm(cardMap.get(currentCardId).term);
+            if (parsed.isBlank) {
+                const focused = bs.inputs.find(i => i === document.activeElement && !i.disabled);
+                if (focused) focused.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+            } else {
+                checkAnswerNormal();
+            }
+        });
+
+        nextBtn.addEventListener('click', handleNext);
+        giveUpBtn.addEventListener('click', giveUp);
+
+        userInputEl.addEventListener('keydown', e => {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const s = userInputEl.selectionStart;
+                userInputEl.value = userInputEl.value.substring(0, s) + '    ' + userInputEl.value.substring(userInputEl.selectionEnd);
+                userInputEl.selectionStart = userInputEl.selectionEnd = s + 4;
+            }
+            if (e.ctrlKey && e.key === 'Enter') checkAnswerNormal();
+        });
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !nextBtn.classList.contains('hidden') && !e.ctrlKey
+                && document.activeElement !== userInputEl
+                && !bs.inputs.includes(document.activeElement)) {
+                e.preventDefault();
+                handleNext();
+            }
+        });
+
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            if (confirm('진행 상황을 초기화하고 처음부터 시작하시겠습니까?')) {
+                clearProgress(); resumeBtn.classList.add('hidden'); init(true);
+            }
+        });
+
+        document.getElementById('shuffle-btn').addEventListener('click', () => {
+            if (confirm('순서를 섞을까요?')) {
+                for (let i = activeQueue.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [activeQueue[i], activeQueue[j]] = [activeQueue[j], activeQueue[i]];
+                }
+                currentCardId = activeQueue[0];
+                displayCard();
+            }
+        });
+
+        // =================================================================
+        // 이벤트 바인딩 - 덱 스위처
+        // =================================================================
+        deckSelect.addEventListener('change', () => {
+            const newId = deckSelect.value;
+            if (newId === activeDeckId) return;
+            activeDeckId = newId;
+            localStorage.setItem(ACTIVE_DECK_KEY, activeDeckId);
+            init(false);
+        });
+
+        document.getElementById('deck-add-btn').addEventListener('click', () => {
+            const name = prompt('새 덱 이름을 입력하세요 (예: 자료구조 기말고사)');
+            if (!name || !name.trim()) return;
+            const subtitle = prompt('부제목을 입력하세요 (선택, 비워도 됩니다)') || '';
+            const deckId = genId('deck');
+            deckList.push({ id: deckId, name: name.trim(), subtitle: subtitle.trim(), createdAt: Date.now() });
+            persistDeckList();
+            localStorage.setItem(cardsKey(deckId), JSON.stringify([]));
+            activeDeckId = deckId;
+            localStorage.setItem(ACTIVE_DECK_KEY, activeDeckId);
+            init(false);
+        });
+
+        document.getElementById('deck-rename-btn').addEventListener('click', () => {
+            const deck = getActiveDeck();
+            if (!deck) return;
+            const name = prompt('덱 이름 수정', deck.name);
+            if (name === null || !name.trim()) return;
+            const subtitle = prompt('부제목 수정 (선택)', deck.subtitle || '');
+            deck.name = name.trim();
+            deck.subtitle = (subtitle === null ? deck.subtitle : subtitle).trim();
+            persistDeckList();
+            renderDeckSelector();
+            updateDeckHeader();
+            fsaSaveAll();
+        });
+
+        document.getElementById('deck-delete-btn').addEventListener('click', () => {
+            if (deckList.length <= 1) { alert('마지막 남은 덱은 삭제할 수 없습니다.'); return; }
+            const deck = getActiveDeck();
+            if (!deck) return;
+            if (!confirm(`"${deck.name}" 덱과 모든 카드/진행 상황을 삭제하시겠습니까?`)) return;
+            localStorage.removeItem(cardsKey(deck.id));
+            localStorage.removeItem(progressKey(deck.id));
+            localStorage.removeItem(statsKey(deck.id));
+            deckList = deckList.filter(d => d.id !== deck.id);
+            persistDeckList();
+            activeDeckId = deckList[0].id;
+            localStorage.setItem(ACTIVE_DECK_KEY, activeDeckId);
+            init(false);
+        });
+
+        // =================================================================
+        // 카드 편집기
+        // =================================================================
+        let tempCards = [], editIndex = -1;
+        const editorModal      = document.getElementById('editor-modal');
+        const editorList       = document.getElementById('editor-list');
+        const editorSearchInput = document.getElementById('editor-search');
+
+        document.getElementById('edit-btn').addEventListener('click', () => {
+            tempCards = JSON.parse(JSON.stringify(allCards));
+            editIndex = -1;
+            editorSearchInput.value = '';
+            document.getElementById('edit-def').value  = '';
+            document.getElementById('edit-term').value = '';
+            document.getElementById('blank-preview-area').classList.add('hidden');
+            renderEditorList();
+            editorModal.classList.remove('hidden');
+        });
+        document.getElementById('close-editor-btn').addEventListener('click', () => editorModal.classList.add('hidden'));
+        editorSearchInput.addEventListener('input', renderEditorList);
+
+        function renderEditorList() {
+            editorList.innerHTML = '';
+            const query = editorSearchInput.value.trim().toLowerCase();
+            const filtered = tempCards
+                .map((c, i) => ({ c, i }))
+                .filter(({ c }) => !query
+                    || c.definition.toLowerCase().includes(query)
+                    || c.term.toLowerCase().includes(query));
+
+            document.getElementById('card-count').textContent = query ? `${filtered.length}/${tempCards.length}` : `${tempCards.length}`;
+
+            filtered.forEach(({ c, i }) => {
+                const hasBlank = /\{\{/.test(c.term);
+                const div = document.createElement('div');
+                div.className = 'p-2 border-b dark:border-gray-800 text-xs cursor-pointer hover:bg-indigo-50 dark:hover:bg-gray-800 flex items-start gap-1'
+                    + (i === editIndex ? ' bg-indigo-50 dark:bg-gray-800' : '');
+
+                const tag = document.createElement('span');
+                tag.className = (hasBlank ? 'text-indigo-500 font-bold' : 'text-gray-300 dark:text-gray-600') + ' shrink-0';
+                tag.textContent = hasBlank ? '[빈]' : '[전]';
+
+                const label = document.createElement('span');
+                label.className = 'truncate dark:text-gray-200';
+                label.textContent = `${i + 1}. ${c.definition.substring(0, 30)}`;
+
+                div.append(tag, label);
+                div.onclick = () => loadEditorItem(i);
+                editorList.appendChild(div);
+            });
+        }
+
+        function loadEditorItem(idx) {
+            editIndex = idx;
+            document.getElementById('edit-def').value  = tempCards[idx].definition;
+            document.getElementById('edit-term').value = tempCards[idx].term;
+            updateBlankPreview(tempCards[idx].term);
+            renderEditorList();
+        }
+
+        document.getElementById('edit-term').addEventListener('input', function () { updateBlankPreview(this.value); });
+
+        function updateBlankPreview(term) {
+            const area    = document.getElementById('blank-preview-area');
+            const preview = document.getElementById('blank-preview');
+            const { isBlank, segments } = parseTerm(term);
+
+            if (!isBlank) { area.classList.add('hidden'); return; }
+            area.classList.remove('hidden');
+
+            let fullCode = '';
+            segments.forEach((seg, i) => { fullCode += seg.isBlank ? getBlankToken(i) : seg.text; });
+
+            let highlighted = fullCode;
+            try { highlighted = hljs.highlightAuto(fullCode).value; } catch (e) {}
+
+            segments.forEach((seg, i) => {
+                if (!seg.isBlank) return;
+                const token = getBlankToken(i);
+                const blankStr = '_'.repeat(Math.max(3, seg.answer.length));
+                highlighted = highlighted.split(token).join(`<span class="text-gray-500 font-bold">${blankStr}</span>`);
+            });
+
+            preview.innerHTML = highlighted;
+        }
+
+        document.getElementById('add-new-card-btn').addEventListener('click', () => {
+            editIndex = -1;
+            document.getElementById('edit-def').value  = '';
+            document.getElementById('edit-term').value = '';
+            document.getElementById('blank-preview-area').classList.add('hidden');
+            renderEditorList();
+        });
+
+        document.getElementById('save-card-btn').addEventListener('click', () => {
+            const def  = document.getElementById('edit-def').value.trim();
+            const term = document.getElementById('edit-term').value.trim();
+            if (!def || !term) { alert('문제 설명과 정답 코드를 모두 입력하세요.'); return; }
+            if (editIndex === -1) {
+                tempCards.push({ id: genId('card'), definition: def, term });
+            } else {
+                tempCards[editIndex] = { ...tempCards[editIndex], definition: def, term };
+            }
+            allCards = [...tempCards];
+            saveCards();
+            onCardsMutated();
+            renderEditorList();
+            alert('저장되었습니다.');
+        });
+
+        document.getElementById('delete-card-btn').addEventListener('click', () => {
+            if (editIndex === -1) { alert('삭제할 카드를 먼저 선택하세요.'); return; }
+            if (!confirm('이 카드를 삭제하시겠습니까?')) return;
+            tempCards.splice(editIndex, 1);
+            editIndex = -1;
+            document.getElementById('edit-def').value  = '';
+            document.getElementById('edit-term').value = '';
+            document.getElementById('blank-preview-area').classList.add('hidden');
+            allCards = [...tempCards];
+            saveCards();
+            onCardsMutated();
+            renderEditorList();
+            alert('삭제되었습니다.');
+        });
+
+        document.getElementById('restore-default-btn').addEventListener('click', () => {
+            if (!confirm('현재 덱의 모든 카드를 삭제하고 빈 상태로 초기화하시겠습니까?')) return;
+            allCards = [];
+            saveCards();
+            statsMap = new Map();
+            saveStats();
+            clearProgress();
+            editorModal.classList.add('hidden');
+            init(true);
+        });
+
+        document.getElementById('export-btn').addEventListener('click', () => {
+            const payload = JSON.stringify(allCards.map(({ definition, term }) => ({ definition, term })), null, 2);
+            const blob    = new Blob([payload], { type: 'application/json' });
+            const url     = URL.createObjectURL(blob);
+            const a       = document.createElement('a');
+            const deck    = getActiveDeck();
+            const safeDeckName = (deck ? deck.name : 'deck').replace(/[^\w가-힣-]+/g, '_');
+            a.href        = url;
+            a.download    = `flashcard_${safeDeckName}_${new Date().toISOString().slice(0,10)}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+
+        document.getElementById('import-input').addEventListener('change', function () {
+            const file = this.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if (!Array.isArray(imported) || imported.some(c => !c.definition || !c.term)) {
+                        alert('올바르지 않은 파일 형식입니다.');
+                        return;
+                    }
+                    if (!confirm(`카드 ${imported.length}개를 가져옵니다. 현재 덱의 카드를 덮어쓸까요?`)) return;
+                    allCards = imported.map(c => ({ id: genId('card'), definition: c.definition, term: c.term }));
+                    saveCards();
+                    statsMap = new Map();
+                    saveStats();
+                    clearProgress();
+                    editorModal.classList.add('hidden');
+                    init(true);
+                    alert(`${imported.length}개 카드를 가져왔습니다.`);
+                } catch (err) {
+                    alert('파일 파싱 중 오류가 발생했습니다.');
+                }
+            };
+            reader.readAsText(file);
+            this.value = '';
+        });
+
+        init();
+    </script>
+</body>
+</html>
