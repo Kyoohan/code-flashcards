@@ -283,6 +283,27 @@ html[data-glass="off"] .lens { display: none; }
 .act svg { width: 14px; height: 14px; flex: 0 0 auto; opacity: .75; }
 .act.wide { grid-column: 1 / -1; }
 .act[hidden] { display: none; }
+.act:disabled { opacity: .4; cursor: default; }
+.act:disabled:hover { background: var(--raise); color: var(--ink-2); border-color: var(--line); }
+.fav-note { grid-column: 1 / -1; font-size: 11px; color: var(--ink-4); padding: 2px 2px 0; }
+.badge.fav { background: rgba(251,191,36,.16); color: #d99e0b; border-color: transparent; }
+:root[data-theme="dark"] .badge.fav { color: #fbbf24; }
+.fav-star {
+  display: inline-block; vertical-align: baseline;
+  width: 18px; height: 18px; padding: 0; margin: 0 1px 0 -2px;
+  color: #8b93a7; opacity: .2; line-height: 0;
+  transition: opacity .15s, color .15s, transform .15s;
+}
+/* 표시하지 않은 별은 흐리게 두고, 코드 영역에 마우스를 올렸을 때만 드러낸다 */
+#blank-stage:hover .fav-star { opacity: .45; }
+.fav-star svg { width: 15px; height: 15px; vertical-align: -2px; }
+.fav-star:hover { opacity: 1; color: #fbbf24; transform: scale(1.18); }
+.fav-star.on { opacity: 1; color: #fbbf24; }
+.blank-chip .star { opacity: .45; color: inherit; }
+.blank-chip .star:hover { opacity: 1; color: #d99e0b; background: rgba(0,0,0,.1); }
+.blank-chip .star.on { opacity: 1; color: #d99e0b; }
+.blank-chip .star svg { width: 12px; height: 12px; display: block; }
+.card-item .fav-tag { color: #d99e0b; flex: 0 0 auto; font-size: 10px; margin-top: 1px; }
 .act.primary { background: var(--accent); color: #fff; border-color: transparent; }
 .act.primary:hover { background: var(--accent-ink); color: #fff; }
 .act.primary svg { opacity: .9; }
@@ -768,6 +789,10 @@ pre.answer-code {
           <div class="rail-actions">
             <button class="act" id="btn-resume" hidden>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 3 14 9-14 9V3Z"/></svg>이어하기</button>
+            <button class="act wide" id="btn-fav-review">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.6l2.5 5.2 5.7.8-4.1 4 1 5.7-5.1-2.7-5.1 2.7 1-5.7-4.1-4 5.7-.8z"/></svg>
+              즐겨찾기만 복습</button>
+            <div class="fav-note wide" id="fav-count">표시한 빈칸 없음</div>
             <button class="act" id="btn-shuffle">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>섞기</button>
             <button class="act" id="btn-stats">
@@ -855,6 +880,7 @@ pre.answer-code {
           <span class="badge accent" id="badge-mode">전체 코드</span>
           <span class="badge" id="badge-progress" hidden></span>
           <span class="badge bad" id="badge-retry" hidden>오답 포함</span>
+          <span class="badge fav" id="badge-fav" hidden>즐겨찾기 복습</span>
           <span class="badge ghost" id="badge-queue"></span>
         </div>
 
@@ -1166,18 +1192,26 @@ function sanitizeBlanks(list, term) {
     if (e < s) [s, e] = [e, s];
     if (e - s <= 0) return;
     if (!term.slice(s, e).trim()) return;   // 공백만인 범위는 무시
-    out.push({ start: s, end: e });
+    out.push(b.fav ? { start: s, end: e, fav: true } : { start: s, end: e });
   });
   out.sort((a, b) => a.start - b.start);
-  // 겹치거나 맞닿은 범위 병합
+  // 겹치거나 맞닿은 범위 병합 (즐겨찾기 표시는 한쪽만 있어도 유지)
   const merged = [];
   for (const b of out) {
     const last = merged[merged.length - 1];
-    if (last && b.start <= last.end) last.end = Math.max(last.end, b.end);
-    else merged.push({ ...b });
+    if (last && b.start <= last.end) {
+      last.end = Math.max(last.end, b.end);
+      if (b.fav) last.fav = true;
+    } else merged.push({ ...b });
   }
   return merged;
 }
+
+/* 즐겨찾기 헬퍼 — 빈칸 객체의 fav 플래그로 관리하므로 카드와 함께 저장·동기화된다 */
+const favIndices = card => new Set((card.blanks || []).map((b, i) => b.fav ? i : -1).filter(i => i >= 0));
+const favCount = card => (card.blanks || []).filter(b => b.fav).length;
+function deckFavTotal() { return allCards.reduce((n, c) => n + favCount(c), 0); }
+function favCardIds() { return allCards.filter(c => favCount(c) > 0).map(c => c.id); }
 
 /** 구버전 {{정답}} 문법 → 깨끗한 코드 + 범위 목록 */
 function convertLegacyBraces(term) {
@@ -1252,11 +1286,11 @@ function remapBlanks(blanks, oldText, newText) {
   const out = [];
   for (const b of blanks) {
     if (b.end <= p) { out.push({ ...b }); continue; }
-    if (b.start >= oldEnd) { out.push({ start: b.start + delta, end: b.end + delta }); continue; }
+    if (b.start >= oldEnd) { out.push({ ...b, start: b.start + delta, end: b.end + delta }); continue; }
     // 편집 구간과 겹침 → 살아남은 부분만 유지
     const ns = Math.min(b.start, p);
     const ne = b.end >= oldEnd ? b.end + delta : Math.max(ns, p);
-    if (ne - ns > 0) out.push({ start: ns, end: ne });
+    if (ne - ns > 0) out.push({ ...b, start: ns, end: ne });
   }
   return sanitizeBlanks(out, newText);
 }
@@ -2089,6 +2123,7 @@ let currentCardId = null;
 let isRetryMode = false;
 let statsMap = new Map();
 let roundTotal = 0;
+let favMode = false;
 
 let bs = { inputs: [], locked: new Set(), wrong: new Set(), frozen: new Set(), open: 0 };
 
@@ -2169,7 +2204,7 @@ function saveProgress() {
     currentRound, activeQueue, roundTotal,
     nextRoundMap: serMap(nextRoundMap),
     prevWrongMap: serMap(prevWrongMap),
-    currentCardId, isRetryMode, savedAt: Date.now(),
+    currentCardId, isRetryMode, favMode, savedAt: Date.now(),
   }));
   stampSave();
   fsaSync();
@@ -2211,6 +2246,7 @@ function onCardsChanged() {
     else nextCard();
   }
   updateMeter();
+  updateFavUI();
   saveProgress();
 }
 
@@ -2299,8 +2335,16 @@ function showCard() {
     $('badge-mode').textContent = '빈칸 채우기';
     $('mode-full').hidden = true;
     $('mode-blank').hidden = false;
-    const prev = prevWrongMap.get(currentCardId);
-    renderBlanks(segmentsOf(card), prev instanceof Set ? prev : null);
+    // 즐겨찾기 복습 중에는 별표한 빈칸만 열고 나머지는 채워진 채로 보여준다
+    let openSet = null;
+    if (favMode) {
+      const f = favIndices(card);
+      if (f.size) openSet = f;
+    } else {
+      const prev = prevWrongMap.get(currentCardId);
+      if (prev instanceof Set) openSet = prev;
+    }
+    renderBlanks(segmentsOf(card), openSet);
   } else {
     $('badge-mode').textContent = '전체 코드';
     $('badge-progress').hidden = true;
@@ -2326,6 +2370,7 @@ function renderBlanks(segments, openSet) {
   host.innerHTML = '';
   $('inline-hint').textContent = '';
   bs = { inputs: [], locked: new Set(), wrong: new Set(), frozen: new Set(), open: 0 };
+  const favSet = favIndices(cardMap.get(currentCardId) || { blanks: [] });
 
   let full = '';
   segments.forEach((seg, i) => { full += seg.isBlank ? blankToken(i) : seg.text; });
@@ -2348,6 +2393,7 @@ function renderBlanks(segments, openSet) {
       bs.open++;
       tag = `<input type="text" class="blank-input" data-i="${idx}" data-a="${ans}" style="width:${w}" spellcheck="false" autocapitalize="off">`;
     }
+    tag += favStarHtml(idx, favSet.has(idx));
     html = html.split(blankToken(i)).join(tag);
   });
 
@@ -2356,10 +2402,51 @@ function renderBlanks(segments, openSet) {
     bs.inputs.push(inp);
     if (!inp.disabled) inp.addEventListener('keydown', onBlankKey);
   });
+  host.querySelectorAll('.fav-star').forEach(btn => {
+    btn.addEventListener('mousedown', e => e.preventDefault());  // 입력 포커스 유지
+    btn.addEventListener('click', () => toggleFav(currentCardId, Number(btn.dataset.i)));
+  });
   updateBlankBadge();
   const first = bs.inputs.find(i => !i.disabled);
   if (first) first.focus();
   if (bs.open === 0) finishBlankCard(false);
+}
+
+const STAR_PATH = 'M12 3.6l2.5 5.2 5.7.8-4.1 4 1 5.7-5.1-2.7-5.1 2.7 1-5.7-4.1-4 5.7-.8z';
+function favStarHtml(idx, on) {
+  return `<button type="button" class="fav-star${on ? ' on' : ''}" data-i="${idx}" tabindex="-1"`
+    + ` title="이 빈칸 즐겨찾기" aria-label="이 빈칸 즐겨찾기" aria-pressed="${on}">`
+    + `<svg viewBox="0 0 24 24" fill="${on ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="${STAR_PATH}"/></svg></button>`;
+}
+
+/** 빈칸 하나의 즐겨찾기 토글 — 카드 데이터에 저장되므로 Gist 동기화에도 함께 실린다 */
+function toggleFav(cardId, idx) {
+  const card = cardMap.get(cardId);
+  if (!card || !card.blanks || !card.blanks[idx]) return;
+  const b = card.blanks[idx];
+  if (b.fav) delete b.fav; else b.fav = true;
+  saveCards();
+  const btn = $('blank-stage').querySelector(`.fav-star[data-i="${idx}"]`);
+  if (btn) {
+    const on = !!b.fav;
+    btn.classList.toggle('on', on);
+    btn.setAttribute('aria-pressed', String(on));
+    btn.querySelector('svg').setAttribute('fill', on ? 'currentColor' : 'none');
+  }
+  updateFavUI();
+  toast(b.fav ? '즐겨찾기에 추가했습니다' : '즐겨찾기에서 뺐습니다', b.fav ? 'good' : undefined);
+}
+
+/** 레일의 즐겨찾기 개수·버튼 상태 갱신 */
+function updateFavUI() {
+  const total = deckFavTotal();
+  const cards = favCardIds().length;
+  $('fav-count').textContent = total ? `빈칸 ${total}개 · 카드 ${cards}장` : '표시한 빈칸 없음';
+  $('btn-fav-review').disabled = total === 0 && !favMode;
+  $('btn-fav-review').innerHTML = favMode
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>복습 끝내기'
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="${STAR_PATH}"/></svg>즐겨찾기만 복습`;
+  $('badge-fav').hidden = !favMode;
 }
 
 function onBlankKey(e) {
@@ -2562,8 +2649,9 @@ async function boot(freshStart = false) {
   updateBrand();
   $('btn-resume').hidden = true;
 
-  if (!allCards.length) { showEmpty(); return; }
+  if (!allCards.length) { favMode = false; updateFavUI(); showEmpty(); return; }
   reconcile();
+  updateFavUI();
 
   if (!freshStart) {
     const p = loadProgress();
@@ -2578,6 +2666,7 @@ async function boot(freshStart = false) {
         prevWrongMap = p.prevWrongMap;
         currentCardId = p.currentCardId;
         isRetryMode = !!p.isRetryMode;
+        favMode = !!p.favMode;
         reconcile();
         if (currentCardId && cardMap.has(currentCardId)) showCard();
         else nextCard();
@@ -2586,6 +2675,8 @@ async function boot(freshStart = false) {
       };
     }
   }
+  favMode = false;
+  updateFavUI();
   startRound(1, allCards.map(c => c.id));
 }
 
@@ -2622,6 +2713,25 @@ document.addEventListener('keydown', e => {
   if (a === $('answer-input') || bs.inputs.includes(a)) return;
   e.preventDefault();
   advance();
+});
+
+$('btn-fav-review').addEventListener('click', () => {
+  if (favMode) {                       // 복습 종료 → 일반 학습으로 복귀
+    favMode = false;
+    clearProgress();
+    boot(true);
+    toast('일반 학습으로 돌아왔습니다');
+    return;
+  }
+  const ids = favCardIds();
+  if (!ids.length) { toast('먼저 빈칸 옆 별표로 즐겨찾기를 추가하세요', 'bad'); return; }
+  favMode = true;
+  currentCardId = null;
+  nextRoundMap.clear();
+  prevWrongMap.clear();
+  updateFavUI();
+  startRound(1, ids);
+  toast(`즐겨찾기 ${deckFavTotal()}개만 복습합니다`, 'good');
 });
 
 $('btn-shuffle').addEventListener('click', async () => {
@@ -2829,6 +2939,14 @@ function renderCardList() {
     txt.className = 'txt';
     txt.textContent = `${i + 1}. ${c.definition || '(설명 없음)'}`;
     row.append(tag, txt);
+    const nf = favCount(c);
+    if (nf) {
+      const f = document.createElement('span');
+      f.className = 'fav-tag';
+      f.textContent = '★' + nf;
+      f.title = `즐겨찾기 빈칸 ${nf}개`;
+      row.append(f);
+    }
     row.addEventListener('click', () => loadCardIntoForm(i));
     list.appendChild(row);
   });
@@ -2891,6 +3009,16 @@ function refreshTermView() {
       const t = document.createElement('span');
       t.className = 't';
       t.textContent = text.slice(b.start, b.end);
+      const star = document.createElement('button');
+      star.type = 'button';
+      star.className = 'star' + (b.fav ? ' on' : '');
+      star.title = b.fav ? '즐겨찾기 해제' : '즐겨찾기에 추가';
+      star.innerHTML = `<svg viewBox="0 0 24 24" fill="${b.fav ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="${STAR_PATH}"/></svg>`;
+      star.addEventListener('click', ev => {
+        ev.stopPropagation();
+        if (b.fav) delete b.fav; else b.fav = true;
+        refreshTermView();
+      });
       const x = document.createElement('button');
       x.type = 'button';
       x.textContent = '×';
@@ -2900,7 +3028,7 @@ function refreshTermView() {
         editBlanks.splice(i, 1);
         refreshTermView();
       });
-      chip.append(t, x);
+      chip.append(t, star, x);
       chip.addEventListener('click', () => {
         termEl.focus();
         termEl.setSelectionRange(b.start, b.end);
@@ -3046,6 +3174,7 @@ $('btn-save-card').addEventListener('click', () => {
   allCards = tempCards.map(normalizeCard);
   saveCards();
   onCardsChanged();
+  updateFavUI();
   renderCardList();
   $('editor-status').textContent = '저장됨';
   setTimeout(() => { $('editor-status').textContent = ''; }, 1600);
@@ -3064,6 +3193,7 @@ $('btn-del-card').addEventListener('click', async () => {
   allCards = tempCards.map(normalizeCard);
   saveCards();
   onCardsChanged();
+  updateFavUI();
   renderCardList();
   refreshTermView();
   toast('삭제했습니다');
