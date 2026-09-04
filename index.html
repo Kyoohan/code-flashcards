@@ -402,15 +402,19 @@ textarea.code-surface:focus { border-color: rgba(139, 133, 255, .55); }
 textarea.code-surface::placeholder { color: #5a6070; }
 
 #blank-stage { padding: 16px 18px; white-space: pre; overflow-x: auto; line-height: 2.2; }
+/* 모든 빈칸은 같은 폭에서 시작한다. 정답 길이에 맞춰 폭을 주면
+   글자 수가 그대로 힌트가 되므로, 폭은 오직 사용자가 입력한 내용으로만 늘어난다. */
+:root { --blank-w: 112px; }
 .blank-input {
   display: inline-block; vertical-align: baseline;
-  min-width: 72px; padding: 0 6px; margin: 0 5px;
+  width: var(--blank-w); padding: 0 6px; margin: 0 5px;
+  transition: width .12s ease, background .15s, border-color .15s;
   background: rgba(255,255,255,.08);
   border: none; border-bottom: 2px solid #8b85ff;
   border-radius: 5px 5px 0 0;
   color: #a5f3fc; caret-color: #a5f3fc;
   font-family: inherit; font-size: 13px; line-height: 1.5;
-  outline: none; transition: background .15s, border-color .15s;
+  outline: none;
 }
 .blank-input:focus { background: rgba(139,133,255,.2); border-bottom-color: #b9b5ff; }
 .blank-input.ok { background: rgba(69,214,163,.16); border-bottom-color: #45d6a3; color: #7defc0; pointer-events: none; }
@@ -625,8 +629,9 @@ pre.answer-code {
   font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.9;
   white-space: pre; overflow-x: auto; color: var(--code-ink); max-height: 170px; overflow-y: auto;
 }
+/* 미리보기도 출제 화면과 같은 고정 폭 — 정답 길이가 드러나지 않는다 */
 .preview-box .blank-slot {
-  display: inline-block; min-width: 46px; padding: 0 6px; margin: 0 3px;
+  display: inline-block; width: var(--blank-w); padding: 0 6px; margin: 0 3px;
   border-bottom: 2px solid rgba(139,133,255,.8); color: transparent;
   background: rgba(139,133,255,.14); border-radius: 4px 4px 0 0;
 }
@@ -2384,14 +2389,15 @@ function renderBlanks(segments, openSet) {
     const idx = bi++;
     const frozen = openSet !== null && !openSet.has(idx);
     const ans = esc(seg.answer);
-    const w = Math.max(72, seg.answer.length * 9.2) + 'px';
     let tag;
     if (frozen) {
+      // 이미 정답이 드러난 칸이므로 내용에 맞춰도 힌트가 되지 않는다
       bs.frozen.add(idx); bs.locked.add(idx);
-      tag = `<input type="text" class="blank-input frozen" data-i="${idx}" data-a="${ans}" value="${ans}" disabled style="width:${w}">`;
+      tag = `<input type="text" class="blank-input frozen" data-i="${idx}" data-a="${ans}" value="${ans}" disabled style="width:${fitWidth(seg.answer)}px">`;
     } else {
+      // 풀어야 하는 칸은 정답 길이와 무관하게 항상 같은 폭에서 시작한다
       bs.open++;
-      tag = `<input type="text" class="blank-input" data-i="${idx}" data-a="${ans}" style="width:${w}" spellcheck="false" autocapitalize="off">`;
+      tag = `<input type="text" class="blank-input" data-i="${idx}" data-a="${ans}" spellcheck="false" autocapitalize="off">`;
     }
     tag += favStarHtml(idx, favSet.has(idx));
     html = html.split(blankToken(i)).join(tag);
@@ -2400,7 +2406,10 @@ function renderBlanks(segments, openSet) {
   host.innerHTML = html;
   host.querySelectorAll('.blank-input').forEach(inp => {
     bs.inputs.push(inp);
-    if (!inp.disabled) inp.addEventListener('keydown', onBlankKey);
+    if (!inp.disabled) {
+      inp.addEventListener('keydown', onBlankKey);
+      inp.addEventListener('input', () => growBlank(inp));
+    }
   });
   host.querySelectorAll('.fav-star').forEach(btn => {
     btn.addEventListener('mousedown', e => e.preventDefault());  // 입력 포커스 유지
@@ -2411,6 +2420,34 @@ function renderBlanks(segments, openSet) {
   if (first) first.focus();
   if (bs.open === 0) finishBlankCard(false);
 }
+
+/* ── 빈칸 폭 ────────────────────────────────────────────
+   정답 길이를 폭으로 노출하지 않기 위해, 열린 빈칸은 항상 --blank-w 에서
+   시작하고 사용자가 입력한 글자 수에 따라서만 늘어난다. */
+let _chW = 0;
+function blankCharWidth() {
+  if (_chW) return _chW;
+  const host = $('blank-stage');
+  if (!host) return 7.9;
+  const probe = document.createElement('span');
+  probe.textContent = '0'.repeat(40);
+  probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;font-size:13px;';
+  host.appendChild(probe);
+  _chW = probe.getBoundingClientRect().width / 40;
+  probe.remove();
+  return _chW || 7.9;
+}
+function baseBlankWidth() {
+  const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--blank-w'));
+  return v || 112;
+}
+function fitWidth(text) {
+  return Math.max(baseBlankWidth(), Math.ceil(String(text).length * blankCharWidth()) + 18);
+}
+/** 입력 내용에 맞춰 폭을 조정 (빈 값이면 기본 폭으로 되돌아간다) */
+function growBlank(inp) { inp.style.width = fitWidth(inp.value) + 'px'; }
+// 웹폰트가 늦게 붙으면 글자 폭이 달라지므로 캐시를 한 번 비운다
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { _chW = 0; });
 
 const STAR_PATH = 'M12 3.6l2.5 5.2 5.7.8-4.1 4 1 5.7-5.1-2.7-5.1 2.7 1-5.7-4.1-4 5.7-.8z';
 function favStarHtml(idx, on) {
@@ -2474,6 +2511,7 @@ function onBlankKey(e) {
   } else {
     inp.classList.add('ng');
     inp.value = '';
+    growBlank(inp);
     bs.wrong.add(idx);
     isRetryMode = true;
     $('badge-retry').hidden = false;
@@ -2570,6 +2608,7 @@ function giveUp() {
       const idx = Number(inp.dataset.i);
       if (bs.locked.has(idx)) return;
       inp.value = inp.dataset.a;
+      growBlank(inp);
       inp.disabled = true;
       inp.classList.add('ok');
       bs.locked.add(idx);
@@ -3054,8 +3093,7 @@ function refreshTermView() {
     try { if (window.hljs) ph = hljs.highlightAuto(full).value; } catch (e) {}
     segs.forEach((s, i) => {
       if (!s.isBlank) return;
-      const w = Math.max(46, s.answer.length * 8);
-      ph = ph.split(blankToken(i)).join(`<span class="blank-slot" style="min-width:${w}px">${esc(s.answer)}</span>`);
+      ph = ph.split(blankToken(i)).join('<span class="blank-slot"></span>');
     });
     $('blank-preview').innerHTML = ph;
   } else pv.hidden = true;
