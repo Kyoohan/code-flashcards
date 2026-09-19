@@ -2197,7 +2197,7 @@ let statsMap = new Map();
 let roundTotal = 0;
 let favMode = false;
 
-let bs = { inputs: [], locked: new Set(), wrong: new Set(), frozen: new Set(), revealed: new Set(), open: 0 };
+let bs = { inputs: [], locked: new Set(), wrong: new Set(), frozen: new Set(), revealed: new Set(), lastWrong: new Map(), open: 0 };
 
 function loadDecks() {
   deckList = safeParse(localStorage.getItem(DECKS_KEY), []);
@@ -2424,6 +2424,7 @@ function showCard() {
   $('feedback').hidden = true;
   $('fb-accept').hidden = true;
   fullAttempt = null;
+  lastFullWrong = null;
   $('badge-retry').hidden = true;
   $('badge-mode').hidden = false;
   $('btn-check').hidden = false;
@@ -2468,7 +2469,7 @@ function renderBlanks(segments, openSet) {
   const host = $('blank-stage');
   host.innerHTML = '';
   $('inline-hint').textContent = '';
-  bs = { inputs: [], locked: new Set(), wrong: new Set(), frozen: new Set(), revealed: new Set(), open: 0 };
+  bs = { inputs: [], locked: new Set(), wrong: new Set(), frozen: new Set(), revealed: new Set(), lastWrong: new Map(), open: 0 };
   const favSet = favIndices(cardMap.get(currentCardId) || { blanks: [] });
 
   let full = '';
@@ -2595,6 +2596,11 @@ function onBlankKey(e) {
     revealBlank(inp, idx);
     return;
   }
+  // 직전에 틀린 답을 고치지 않고 다시 Enter → 모르겠다는 뜻으로 보고 정답을 보여준다
+  if (bs.lastWrong.get(idx) === normalize(inp.value)) {
+    revealBlank(inp, idx);
+    return;
+  }
 
   if (normalize(inp.value) === normalize(inp.dataset.a)) {
     inp.classList.remove('ng');
@@ -2609,6 +2615,7 @@ function onBlankKey(e) {
     else finishBlankCard(bs.wrong.size > 0);
   } else {
     inp.classList.add('ng');
+    bs.lastWrong.set(idx, normalize(inp.value));
     bs.wrong.add(idx);
     isRetryMode = true;
     $('badge-retry').hidden = false;
@@ -2628,7 +2635,7 @@ function hintWithAccept(idx, typed) {
   const el = $('inline-hint');
   el.className = 'ng';
   el.innerHTML = '';
-  el.append(document.createTextNode('다시 시도하거나, 비우고 Enter로 정답 보기 · '));
+  el.append(document.createTextNode('고쳐서 다시 시도 · 그대로 Enter → 정답 보기 · '));
   const b = document.createElement('button');
   b.type = 'button';
   b.className = 'link-btn';
@@ -2728,6 +2735,7 @@ function finishBlankCard(hadWrong) {
 }
 
 let fullAttempt = null;
+let lastFullWrong = null;
 
 function acceptFullCorrect(ta) {
   feedback('good', '정답입니다', isRetryMode ? '오답 기록이 있어 다음 라운드에 한 번 더 나옵니다.' : '완벽합니다.');
@@ -2759,6 +2767,7 @@ function checkFull() {
   if (!card) return;
   const ta = $('answer-input');
   if (!ta.value.trim()) { giveUp(); return; }   // 빈 채로 확인 → 포기로 간주
+  if (lastFullWrong !== null && normalize(ta.value) === lastFullWrong) { giveUp(); return; }   // 같은 오답 재제출 → 포기
   $('fb-accept').hidden = true;
   if (normalize(ta.value) === normalize(card.term)) {
     fullAttempt = null;
@@ -2767,8 +2776,9 @@ function checkFull() {
   } else {
     // 인정 버튼으로 되돌릴 수 있도록 이 시도 이전의 상태를 기억한다
     fullAttempt = { prevRetry: isRetryMode, prevNext: nextRoundMap.has(currentCardId) ? nextRoundMap.get(currentCardId) : undefined };
+    lastFullWrong = normalize(ta.value);
     record(currentCardId, false);
-    const fb = feedback('bad', '아직 다릅니다', '아래 비교를 보고 수정한 뒤 다시 확인하세요.');
+    const fb = feedback('bad', '아직 다릅니다', '비교를 보고 고쳐서 다시 확인하세요. 그대로 다시 확인하면 정답을 보여줍니다.');
     $('fb-accept').hidden = false;
     fb.classList.add('shake');
     setTimeout(() => fb.classList.remove('shake'), 400);
