@@ -584,6 +584,10 @@ pre.answer-code {
 .chip-btn:disabled { opacity: .42; cursor: default; }
 .chip-btn svg { width: 13px; height: 13px; }
 .hint { font-size: 11.5px; color: var(--ink-4); }
+.link-btn { color: var(--accent-ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; padding: 0 2px; }
+.link-btn:hover { color: var(--accent); }
+.fb-accept { margin-top: 10px; }
+.feedback.bad .fb-accept:hover { background: var(--good-soft); color: var(--good); }
 
 .code-editor { position: relative; }
 .code-editor .mirror {
@@ -805,8 +809,6 @@ pre.answer-code {
         <div class="rail-group">
           <div class="rail-label">학습</div>
           <div class="rail-actions">
-            <button class="act" id="btn-resume" hidden>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 3 14 9-14 9V3Z"/></svg>이어하기</button>
             <button class="act wide" id="btn-fav-review">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.6l2.5 5.2 5.7.8-4.1 4 1 5.7-5.1-2.7-5.1 2.7 1-5.7-4.1-4 5.7-.8z"/></svg>
               즐겨찾기만 복습</button>
@@ -920,6 +922,9 @@ pre.answer-code {
         <div class="feedback" id="feedback" hidden>
           <div class="feedback-head"><h3 id="fb-title"></h3></div>
           <p id="fb-desc"></p>
+          <button class="chip-btn fb-accept" id="fb-accept" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+            내 답을 정답으로 인정</button>
           <div class="sub" id="fb-diff" hidden>
             <div class="sub-label">비교 — 초록: 정답 / 빨강: 입력 오류</div>
             <div class="diff-out" id="diff-out"></div>
@@ -2251,6 +2256,14 @@ function saveCards() {
 }
 function loadStats() { statsMap = new Map(safeParse(localStorage.getItem(statsKey(activeDeckId)), [])); }
 function saveStats() { localStorage.setItem(statsKey(activeDeckId), JSON.stringify([...statsMap])); gist.schedule(); }
+/** 방금 오답으로 기록된 시도를 정답으로 정정 (시도 횟수는 그대로) */
+function recordOverride(id) {
+  const st = statsMap.get(id);
+  if (!st) return;
+  st.wrong = Math.max(0, st.wrong - 1);
+  st.correct++;
+  saveStats();
+}
 function record(id, ok) {
   if (!id) return;
   const s = statsMap.get(id) || { attempts: 0, correct: 0, wrong: 0 };
@@ -2409,6 +2422,8 @@ function showCard() {
 
   $('question').textContent = card.definition;
   $('feedback').hidden = true;
+  $('fb-accept').hidden = true;
+  fullAttempt = null;
   $('badge-retry').hidden = true;
   $('badge-mode').hidden = false;
   $('btn-check').hidden = false;
@@ -2594,18 +2609,58 @@ function onBlankKey(e) {
     else finishBlankCard(bs.wrong.size > 0);
   } else {
     inp.classList.add('ng');
-    inp.value = '';
-    growBlank(inp);
     bs.wrong.add(idx);
     isRetryMode = true;
     $('badge-retry').hidden = false;
     nextRoundMap.set(currentCardId, new Set(bs.wrong));
     record(currentCardId, false);
-    hint('ng', '다시 시도하세요');
+    // 입력을 남겨 두고 전체 선택: 다시 치면 덮어써지고, 인정하려면 그대로 인정할 수 있다
+    hintWithAccept(idx, inp.value);
     updateMeter();
     saveProgress();
     inp.focus();
+    inp.select();
   }
+}
+
+/** 오답 안내 + "정답으로 인정" 버튼 */
+function hintWithAccept(idx, typed) {
+  const el = $('inline-hint');
+  el.className = 'ng';
+  el.innerHTML = '';
+  el.append(document.createTextNode('다시 시도하거나, 비우고 Enter로 정답 보기 · '));
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'link-btn';
+  b.textContent = `"${typed.length > 24 ? typed.slice(0, 24) + '…' : typed}" 정답으로 인정`;
+  b.addEventListener('mousedown', e => e.preventDefault());
+  b.addEventListener('click', () => acceptBlank(idx));
+  el.append(b);
+}
+
+/** 빈칸 하나의 오답 판정을 뒤집어 정답 처리 */
+function acceptBlank(idx) {
+  const inp = bs.inputs.find(i => Number(i.dataset.i) === idx);
+  if (!inp || bs.locked.has(idx)) return;
+  bs.wrong.delete(idx);
+  recordOverride(currentCardId);
+  inp.classList.remove('ng');
+  inp.classList.add('ok');
+  inp.disabled = true;
+  bs.locked.add(idx);
+  // 이 카드의 오답 상태는 남은 오답 칸이 있는지로 다시 결정한다
+  if (bs.wrong.size) nextRoundMap.set(currentCardId, new Set(bs.wrong));
+  else nextRoundMap.delete(currentCardId);
+  isRetryMode = bs.wrong.size > 0;
+  $('badge-retry').hidden = !isRetryMode;
+  hint('ok', '정답으로 인정');
+  updateBlankBadge();
+  updateMeter();
+  saveProgress();
+  toast('정답으로 처리했습니다', 'good');
+  const nxt = bs.inputs.find(i => !i.disabled);
+  if (nxt) nxt.focus();
+  else finishBlankCard(bs.wrong.size > 0);
 }
 /** 빈칸 하나를 포기하고 정답 공개 — 오답으로 기록되고 다음 라운드에 다시 나온다 */
 function revealBlank(inp, idx) {
@@ -2632,6 +2687,7 @@ function revealBlank(inp, idx) {
 
 function hint(kind, msg) {
   const el = $('inline-hint');
+  el.innerHTML = '';
   el.textContent = msg;
   el.className = kind;
   if (kind === 'ok') setTimeout(() => { if (el.textContent === msg) el.textContent = ''; }, 800);
@@ -2671,22 +2727,49 @@ function finishBlankCard(hadWrong) {
   saveProgress();
 }
 
+let fullAttempt = null;
+
+function acceptFullCorrect(ta) {
+  feedback('good', '정답입니다', isRetryMode ? '오답 기록이 있어 다음 라운드에 한 번 더 나옵니다.' : '완벽합니다.');
+  if (isRetryMode) nextRoundMap.set(currentCardId, 'all');
+  else nextRoundMap.delete(currentCardId);
+  ta.disabled = true;
+  toNext();
+  scheduleAdvance();
+}
+
+/** 전체 코드 모드의 오답 판정을 뒤집어 정답 처리 */
+function acceptFull() {
+  if (!fullAttempt) return;
+  const snap = fullAttempt; fullAttempt = null;
+  recordOverride(currentCardId);
+  isRetryMode = snap.prevRetry;
+  if (snap.prevNext === undefined) nextRoundMap.delete(currentCardId);
+  else nextRoundMap.set(currentCardId, snap.prevNext);
+  $('badge-retry').hidden = !isRetryMode;
+  $('fb-accept').hidden = true;
+  toast('정답으로 처리했습니다', 'good');
+  acceptFullCorrect($('answer-input'));
+  updateMeter();
+  saveProgress();
+}
+
 function checkFull() {
   const card = cardMap.get(currentCardId);
   if (!card) return;
   const ta = $('answer-input');
   if (!ta.value.trim()) { giveUp(); return; }   // 빈 채로 확인 → 포기로 간주
+  $('fb-accept').hidden = true;
   if (normalize(ta.value) === normalize(card.term)) {
+    fullAttempt = null;
     record(currentCardId, true);
-    feedback('good', '정답입니다', isRetryMode ? '오답 기록이 있어 다음 라운드에 한 번 더 나옵니다.' : '완벽합니다.');
-    if (isRetryMode) nextRoundMap.set(currentCardId, 'all');
-    else nextRoundMap.delete(currentCardId);
-    ta.disabled = true;
-    toNext();
-    scheduleAdvance();
+    acceptFullCorrect(ta);
   } else {
+    // 인정 버튼으로 되돌릴 수 있도록 이 시도 이전의 상태를 기억한다
+    fullAttempt = { prevRetry: isRetryMode, prevNext: nextRoundMap.has(currentCardId) ? nextRoundMap.get(currentCardId) : undefined };
     record(currentCardId, false);
     const fb = feedback('bad', '아직 다릅니다', '아래 비교를 보고 수정한 뒤 다시 확인하세요.');
+    $('fb-accept').hidden = false;
     fb.classList.add('shake');
     setTimeout(() => fb.classList.remove('shake'), 400);
     const out = $('diff-out');
@@ -2798,32 +2881,30 @@ async function boot(freshStart = false) {
   loadStats();
   renderDeckSelect();
   updateBrand();
-  $('btn-resume').hidden = true;
 
   if (!allCards.length) { favMode = false; updateFavUI(); showEmpty(); return; }
   reconcile();
   updateFavUI();
 
+  // 저장된 진행이 있으면 그 자리에서 바로 이어간다. 새 라운드를 먼저 시작해 버리면
+  // 저장 슬롯이 덮여서 다음 새로고침 때 진행이 사라진다. 처음부터는 '초기화'로.
   if (!freshStart) {
     const p = loadProgress();
-    if (p && p.activeQueue && p.activeQueue.length) {
-      $('btn-resume').hidden = false;
-      $('btn-resume').onclick = () => {
-        $('btn-resume').hidden = true;
-        currentRound = p.currentRound || 1;
-        activeQueue = p.activeQueue;
-        roundTotal = p.roundTotal || p.activeQueue.length;
-        nextRoundMap = p.nextRoundMap;
-        prevWrongMap = p.prevWrongMap;
-        currentCardId = p.currentCardId;
-        isRetryMode = !!p.isRetryMode;
-        favMode = !!p.favMode;
-        reconcile();
-        if (currentCardId && cardMap.has(currentCardId)) showCard();
-        else nextCard();
-        updateMeter();
-        toast('이어서 진행합니다');
-      };
+    if (p && Array.isArray(p.activeQueue) && p.activeQueue.length) {
+      currentRound = p.currentRound || 1;
+      activeQueue = p.activeQueue;
+      roundTotal = p.roundTotal || p.activeQueue.length;
+      nextRoundMap = p.nextRoundMap;
+      prevWrongMap = p.prevWrongMap;
+      currentCardId = p.currentCardId;
+      isRetryMode = !!p.isRetryMode;
+      favMode = !!p.favMode;
+      reconcile();
+      updateFavUI();
+      if (currentCardId && cardMap.has(currentCardId) && activeQueue[0] === currentCardId) showCard();
+      else nextCard();
+      updateMeter();
+      return;
     }
   }
   favMode = false;
@@ -2845,6 +2926,7 @@ $('btn-check').addEventListener('click', () => {
 });
 $('btn-next').addEventListener('click', advance);
 $('btn-giveup').addEventListener('click', giveUp);
+$('fb-accept').addEventListener('click', acceptFull);
 
 $('answer-input').addEventListener('keydown', e => {
   if (e.key === 'Tab') {
