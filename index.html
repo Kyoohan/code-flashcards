@@ -1073,6 +1073,7 @@ pre.answer-code {
     </div>
     <div class="sheet-foot">
       <button class="btn btn-quiet btn-sm" id="dlg-cancel">취소</button>
+      <button class="btn btn-quiet btn-sm" id="dlg-alt" hidden></button>
       <button class="btn btn-primary btn-sm" id="dlg-ok">확인</button>
     </div>
   </div>
@@ -1130,7 +1131,7 @@ function closeDlg(value) {
   const r = _dlgResolve; _dlgResolve = null;
   if (r) r(value);
 }
-function openDlg({ title, message = '', okText = '확인', cancelText = '취소', danger = false, fields = [] }) {
+function openDlg({ title, message = '', okText = '확인', cancelText = '취소', altText = null, altDanger = false, danger = false, fields = [] }) {
   return new Promise(resolve => {
     _dlgResolve = resolve;
     $('dlg-title').textContent = title;
@@ -1165,6 +1166,10 @@ function openDlg({ title, message = '', okText = '확인', cancelText = '취소'
     ok.className = 'btn btn-sm ' + (danger ? 'btn-quiet' : 'btn-primary');
     if (danger) ok.style.color = 'var(--bad)'; else ok.style.color = '';
     $('dlg-cancel').textContent = cancelText;
+    const alt = $('dlg-alt');
+    alt.hidden = !altText;
+    alt.textContent = altText || '';
+    alt.style.color = altDanger ? 'var(--bad)' : '';
     $('dlg').hidden = false;
     const first = wrap.querySelector('input');
     setTimeout(() => (first || ok).focus(), 40);
@@ -1177,6 +1182,7 @@ function dlgValues() {
 }
 $('dlg-ok').addEventListener('click', () => closeDlg(dlgValues() && { ok: true, ...dlgValues() }));
 $('dlg-cancel').addEventListener('click', () => closeDlg(null));
+$('dlg-alt').addEventListener('click', () => closeDlg({ ok: true, alt: true, ...dlgValues() }));
 $('dlg').addEventListener('click', e => { if (e.target === $('dlg')) closeDlg(null); });
 
 const confirmBox = (title, message, okText = '확인', danger = true) =>
@@ -3358,15 +3364,32 @@ function handleFile(file) {
     if (Array.isArray(data)) {                 // 카드 JSON
       const cards = data.filter(c => c && c.definition && c.term).map(normalizeCard);
       if (!cards.length) { toast('가져올 카드가 없습니다', 'bad'); return; }
-      if (!await confirmBox('카드 가져오기', `${cards.length}장을 가져옵니다. 현재 덱의 카드를 모두 대체합니다.`, '가져오기')) return;
-      allCards = cards;
-      saveCards();
-      statsMap = new Map(); saveStats();
-      clearProgress();
-      currentCardId = null; activeQueue = []; nextRoundMap.clear(); prevWrongMap.clear();
+      const deck = activeDeck();
+      const r = await openDlg({
+        title: '카드 가져오기',
+        message: `${cards.length}장을 찾았습니다. "${deck ? deck.name : '현재 덱'}"에 어떻게 넣을까요?\n\n추가: 기존 카드는 그대로 두고 뒤에 붙입니다.\n대체: 기존 카드·진행 상황·통계를 지우고 이 파일로 바꿉니다.`,
+        okText: '기존 카드에 추가',
+        altText: '전부 대체',
+        altDanger: true,
+        cancelText: '취소',
+      });
+      if (!r) return;
       $('editor-modal').hidden = true;
-      await boot(true);
-      toast(`${cards.length}장을 가져왔습니다`, 'good');
+      if (r.alt) {
+        allCards = cards;
+        saveCards();
+        statsMap = new Map(); saveStats();
+        clearProgress();
+        currentCardId = null; activeQueue = []; nextRoundMap.clear(); prevWrongMap.clear();
+        await boot(true);
+        toast(`${cards.length}장으로 대체했습니다`, 'good');
+      } else {
+        // 진행 중인 라운드가 있으면 새 카드가 대기열 뒤에 자연스럽게 붙는다
+        allCards = allCards.concat(cards);
+        saveCards();
+        onCardsChanged();
+        toast(`${cards.length}장을 추가했습니다 (총 ${allCards.length}장)`, 'good');
+      }
       return;
     }
     toast('지원하지 않는 형식입니다', 'bad');
