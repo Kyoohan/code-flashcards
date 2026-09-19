@@ -519,6 +519,11 @@ pre.answer-code {
   padding: 14px 20px; border-top: 1px solid var(--line); flex: 0 0 auto;
 }
 .sheet-foot .left { margin-right: auto; font-size: 12px; color: var(--ink-3); }
+.import-text { width: 100%; min-height: 260px; padding: 14px 16px; white-space: pre; overflow: auto; outline: none; resize: vertical; font-size: 12.5px; }
+.import-text::placeholder { color: #5a6070; }
+.import-text:focus { border-color: rgba(139,133,255,.55); }
+#import-drop.over { background: var(--accent-soft); }
+.sheet-head .sub code, .hint code { font-family: 'JetBrains Mono', monospace; font-size: 11px; background: var(--sunken); padding: 1px 5px; border-radius: 4px; }
 .btn-sm { padding: 9px 16px; border-radius: 11px; font-size: 13px; font-weight: 600; }
 
 /* 편집기 */
@@ -1059,6 +1064,49 @@ pre.answer-code {
       <div class="left" id="nb-status"></div>
       <button class="btn btn-quiet btn-sm" id="nb-toggle-all" hidden>전체 선택 해제</button>
       <button class="btn btn-primary btn-sm" id="nb-import" hidden>가져오기</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 가져오기 (붙여넣기 / 파일 → 미리보기) ─────────────── -->
+<div class="modal" id="import-modal" hidden data-liquid-ignore>
+  <div class="sheet">
+    <div class="sheet-head">
+      <div>
+        <h3>카드 가져오기</h3>
+        <div class="sub" id="import-sub">AI가 만든 JSON을 그대로 붙여넣으세요 — <code>```json</code> 표시가 섞여 있어도 됩니다</div>
+      </div>
+      <button class="icon-btn" data-close="import-modal" aria-label="닫기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="sheet-body" id="import-drop">
+      <div id="import-stage-paste">
+        <textarea id="import-text" class="code-surface import-text" spellcheck="false" placeholder='[
+  { "definition": "문제 설명", "term": "코드 ({{빈칸}} 표시 가능)" }
+]'></textarea>
+        <div class="hint" style="margin-top:10px">코드 안의 <code>{{ }}</code>는 빈칸으로 변환됩니다. .json이나 .ipynb 파일을 이 창에 끌어다 놓아도 됩니다.</div>
+      </div>
+      <div id="import-stage-preview" hidden>
+        <div class="nb-controls">
+          <div>
+            <div class="ctl-label">가져올 위치</div>
+            <div class="seg" id="import-target">
+              <button data-v="append" aria-pressed="true">기존 카드에 추가</button>
+              <button data-v="replace" aria-pressed="false">전부 대체</button>
+            </div>
+          </div>
+        </div>
+        <div class="hint" id="import-replace-warn" hidden style="margin:-6px 0 12px;color:var(--bad)">대체하면 이 덱의 기존 카드·진행 상황·통계가 모두 지워집니다.</div>
+        <div class="nb-list" id="import-list"></div>
+      </div>
+    </div>
+    <div class="sheet-foot">
+      <div class="left" id="import-status"></div>
+      <button class="btn btn-quiet btn-sm" id="import-back" hidden>← 다시 붙여넣기</button>
+      <button class="btn btn-quiet btn-sm" id="import-toggle-all" hidden>전체 선택 해제</button>
+      <button class="btn btn-quiet btn-sm" id="import-file-btn">파일 선택…</button>
+      <button class="btn btn-primary btn-sm" id="import-submit">미리보기 <span class="kbd">⌘↵</span></button>
     </div>
   </div>
 </div>
@@ -2753,7 +2801,7 @@ $('answer-input').addEventListener('keydown', e => {
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter' || e.ctrlKey || e.metaKey) return;
   if ($('btn-next').hidden) return;
-  if (!$('editor-modal').hidden || !$('nb-modal').hidden || !$('stats-modal').hidden || !$('dlg').hidden) return;
+  if (!$('editor-modal').hidden || !$('nb-modal').hidden || !$('stats-modal').hidden || !$('import-modal').hidden || !$('dlg').hidden) return;
   const a = document.activeElement;
   if (a === $('answer-input') || bs.inputs.includes(a)) return;
   e.preventDefault();
@@ -2928,7 +2976,7 @@ document.querySelectorAll('[data-close]').forEach(b => {
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   if (!$('dlg').hidden) { closeDlg(null); return; }
-  ['nb-modal', 'stats-modal', 'editor-modal'].forEach(id => { if (!$(id).hidden) $(id).hidden = true; });
+  ['import-modal', 'nb-modal', 'stats-modal', 'editor-modal'].forEach(id => { if (!$(id).hidden) $(id).hidden = true; });
 });
 
 /* ============================================================
@@ -3336,7 +3384,136 @@ $('btn-export').addEventListener('click', () => {
   toast(`${allCards.length}장을 내보냈습니다`, 'good');
 });
 
-$('btn-import').addEventListener('click', () => { $('file-input').accept = '.json,.ipynb'; $('file-input').click(); });
+/* ── 가져오기 미리보기 ─────────────────────────────────── */
+let importCards = [], importPicked = [], importMode = 'append';
+
+function setImportStage(stage) {
+  const preview = stage === 'preview';
+  $('import-stage-paste').hidden = preview;
+  $('import-stage-preview').hidden = !preview;
+  $('import-back').hidden = !preview;
+  $('import-toggle-all').hidden = !preview;
+  $('import-file-btn').hidden = preview;
+  $('import-sub').innerHTML = preview
+    ? '가져올 카드를 확인하고 필요 없는 것은 체크를 해제하세요'
+    : 'AI가 만든 JSON을 그대로 붙여넣으세요 — <code>```json</code> 표시가 섞여 있어도 됩니다';
+  if (!preview) {
+    $('import-status').textContent = '';
+    $('import-submit').innerHTML = '미리보기 <span class="kbd">⌘↵</span>';
+    $('import-submit').disabled = false;
+  }
+}
+
+function showImportPreview(cards, name) {
+  importCards = cards;
+  importPicked = cards.map(() => true);
+  importMode = 'append';
+  $('import-target').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === 'append')));
+  $('import-replace-warn').hidden = true;
+  $('import-modal').hidden = false;
+  setImportStage('preview');
+  renderImportList();
+}
+
+function renderImportList() {
+  const host = $('import-list');
+  host.innerHTML = '';
+  importCards.forEach((c, i) => {
+    const row = document.createElement('div');
+    row.className = 'nb-item' + (importPicked[i] ? '' : ' off');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.className = 'cb'; cb.checked = importPicked[i];
+    cb.addEventListener('change', () => { importPicked[i] = cb.checked; row.classList.toggle('off', !cb.checked); updateImportStatus(); });
+    const body = document.createElement('div');
+    body.className = 'body';
+    const t = document.createElement('div');
+    t.className = 't';
+    t.textContent = `${i + 1}. ` + (c.blanks.length ? `빈칸 ${c.blanks.length}개` : '전체 코드');
+    const d = document.createElement('div');
+    d.className = 'd';
+    d.textContent = c.definition.replace(/\n+/g, ' ');
+    const code = document.createElement('div');
+    code.className = 'c';
+    code.innerHTML = markedCode(c.term, c.blanks);
+    body.append(t, d, code);
+    row.append(cb, body);
+    host.appendChild(row);
+  });
+  updateImportStatus();
+}
+
+function updateImportStatus() {
+  const n = importPicked.filter(Boolean).length;
+  const blanks = importCards.filter((_, i) => importPicked[i]).reduce((a, c) => a + c.blanks.length, 0);
+  $('import-status').textContent = `${importCards.length}장 중 ${n}장 선택 · 빈칸 ${blanks}개`;
+  $('import-submit').textContent = importMode === 'replace' ? `${n}장으로 대체` : `${n}장 추가`;
+  $('import-submit').disabled = n === 0;
+  $('import-toggle-all').textContent = importPicked.every(Boolean) ? '전체 선택 해제' : '전체 선택';
+}
+
+async function applyImport(cards, mode) {
+  $('import-modal').hidden = true;
+  $('editor-modal').hidden = true;
+  if (mode === 'replace') {
+    allCards = cards;
+    saveCards();
+    statsMap = new Map(); saveStats();
+    clearProgress();
+    currentCardId = null; activeQueue = []; nextRoundMap.clear(); prevWrongMap.clear();
+    await boot(true);
+    toast(`${cards.length}장으로 대체했습니다`, 'good');
+  } else {
+    // 진행 중인 라운드가 있으면 새 카드가 대기열 뒤에 자연스럽게 붙는다
+    allCards = allCards.concat(cards);
+    saveCards();
+    onCardsChanged();
+    toast(`${cards.length}장을 추가했습니다 (총 ${allCards.length}장)`, 'good');
+  }
+}
+
+$('import-target').querySelectorAll('button').forEach(b => {
+  b.addEventListener('click', () => {
+    importMode = b.dataset.v;
+    $('import-target').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    $('import-replace-warn').hidden = importMode !== 'replace';
+    updateImportStatus();
+  });
+});
+$('import-toggle-all').addEventListener('click', () => {
+  const allOn = importPicked.every(Boolean);
+  importPicked = importPicked.map(() => !allOn);
+  renderImportList();
+});
+$('import-back').addEventListener('click', () => { setImportStage('paste'); setTimeout(() => $('import-text').focus(), 40); });
+
+$('btn-import').addEventListener('click', () => {
+  $('import-text').value = '';
+  setImportStage('paste');
+  $('import-modal').hidden = false;
+  setTimeout(() => $('import-text').focus(), 60);
+});
+$('import-file-btn').addEventListener('click', () => { $('file-input').accept = '.json,.ipynb'; $('file-input').click(); });
+$('import-submit').addEventListener('click', async () => {
+  if (!$('import-stage-preview').hidden) {
+    const picked = importCards.filter((_, i) => importPicked[i]);
+    if (!picked.length) return;
+    if (importMode === 'replace' && !await confirmBox('전부 대체', `현재 덱의 카드 ${allCards.length}장과 진행 상황·통계를 지우고 ${picked.length}장으로 바꿉니다.`, '대체')) return;
+    await applyImport(picked, importMode);
+    return;
+  }
+  const t = $('import-text').value.trim();
+  if (!t) { toast('붙여넣은 내용이 없습니다', 'bad'); return; }
+  handleText(t, '붙여넣기');
+});
+$('import-text').addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); $('import-submit').click(); }
+});
+['dragenter', 'dragover'].forEach(ev => $('import-drop').addEventListener(ev, e => { e.preventDefault(); $('import-drop').classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => $('import-drop').addEventListener(ev, e => { e.preventDefault(); $('import-drop').classList.remove('over'); }));
+$('import-drop').addEventListener('drop', e => {
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) handleFile(f);
+});
 $('btn-notebook').addEventListener('click', () => {
   $('nb-modal').hidden = false;
   resetNbModal();
@@ -3350,51 +3527,43 @@ $('file-input').addEventListener('change', function () {
 
 function handleFile(file) {
   const reader = new FileReader();
-  reader.onload = async e => {
-    const text = String(e.target.result || '');
-    let data;
-    try { data = JSON.parse(text); }
-    catch { toast('JSON을 읽을 수 없는 파일입니다', 'bad'); return; }
+  reader.onload = e => handleText(String(e.target.result || ''), file.name);
+  reader.readAsText(file);
+}
 
+/** 붙여넣은 텍스트에서 JSON 을 너그럽게 꺼낸다 — ```json 펜스나 앞뒤 설명이 섞여 있어도 됨 */
+function parseLoose(text) {
+  let t = String(text || '').trim();
+  t = t.replace(/^```[a-zA-Z]*[ \t]*\r?\n?/, '').replace(/\r?\n?```\s*$/, '').trim();
+  try { return JSON.parse(t); } catch (e) {}
+  const spans = [['[', ']'], ['{', '}']]
+    .map(([o, c]) => [t.indexOf(o), t.lastIndexOf(c)])
+    .filter(([a, b]) => a >= 0 && b > a)
+    .sort((x, y) => x[0] - y[0]);              // 먼저 나오는 괄호부터 시도
+  for (const [a, b] of spans) {
+    try { return JSON.parse(t.slice(a, b + 1)); } catch (e) {}
+  }
+  return undefined;
+}
+
+async function handleText(text, name) {
+  const data = parseLoose(text);
+  if (data === undefined) { toast('JSON을 읽을 수 없습니다. 배열 형태인지 확인해 주세요', 'bad'); return; }
+  $('import-modal').hidden = true;
+  {
     if (data && Array.isArray(data.cells)) {   // .ipynb
       $('nb-modal').hidden = false;
-      loadNotebook(data, file.name);
+      loadNotebook(data, name || 'notebook');
       return;
     }
     if (Array.isArray(data)) {                 // 카드 JSON
       const cards = data.filter(c => c && c.definition && c.term).map(normalizeCard);
       if (!cards.length) { toast('가져올 카드가 없습니다', 'bad'); return; }
-      const deck = activeDeck();
-      const r = await openDlg({
-        title: '카드 가져오기',
-        message: `${cards.length}장을 찾았습니다. "${deck ? deck.name : '현재 덱'}"에 어떻게 넣을까요?\n\n추가: 기존 카드는 그대로 두고 뒤에 붙입니다.\n대체: 기존 카드·진행 상황·통계를 지우고 이 파일로 바꿉니다.`,
-        okText: '기존 카드에 추가',
-        altText: '전부 대체',
-        altDanger: true,
-        cancelText: '취소',
-      });
-      if (!r) return;
-      $('editor-modal').hidden = true;
-      if (r.alt) {
-        allCards = cards;
-        saveCards();
-        statsMap = new Map(); saveStats();
-        clearProgress();
-        currentCardId = null; activeQueue = []; nextRoundMap.clear(); prevWrongMap.clear();
-        await boot(true);
-        toast(`${cards.length}장으로 대체했습니다`, 'good');
-      } else {
-        // 진행 중인 라운드가 있으면 새 카드가 대기열 뒤에 자연스럽게 붙는다
-        allCards = allCards.concat(cards);
-        saveCards();
-        onCardsChanged();
-        toast(`${cards.length}장을 추가했습니다 (총 ${allCards.length}장)`, 'good');
-      }
+      showImportPreview(cards, name);
       return;
     }
     toast('지원하지 않는 형식입니다', 'bad');
-  };
-  reader.readAsText(file);
+  }
 }
 
 /* ============================================================
@@ -3578,7 +3747,9 @@ window.addEventListener('dragover', e => e.preventDefault());
 window.addEventListener('drop', e => {
   e.preventDefault();
   const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-  if (f && /\.ipynb$/i.test(f.name)) { $('nb-modal').hidden = false; resetNbModal(); handleFile(f); }
+  if (!f) return;
+  if (/\.ipynb$/i.test(f.name)) { $('nb-modal').hidden = false; resetNbModal(); handleFile(f); }
+  else if (/\.json$/i.test(f.name)) handleFile(f);
 });
 
 function bindSeg(id, key, after) {
