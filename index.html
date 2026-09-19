@@ -2666,8 +2666,9 @@ function acceptBlank(idx) {
   saveProgress();
   toast('정답으로 처리했습니다', 'good');
   const nxt = bs.inputs.find(i => !i.disabled);
-  if (nxt) nxt.focus();
-  else finishBlankCard(bs.wrong.size > 0);
+  if (nxt) { nxt.focus(); return; }
+  finishBlankCard(bs.wrong.size > 0);
+  advance();                 // 마지막 칸을 인정한 것이면 바로 다음 문제로
 }
 /** 빈칸 하나를 포기하고 정답 공개 — 오답으로 기록되고 다음 라운드에 다시 나온다 */
 function revealBlank(inp, idx) {
@@ -2756,10 +2757,12 @@ function acceptFull() {
   else nextRoundMap.set(currentCardId, snap.prevNext);
   $('badge-retry').hidden = !isRetryMode;
   $('fb-accept').hidden = true;
-  toast('정답으로 처리했습니다', 'good');
-  acceptFullCorrect($('answer-input'));
+  if (isRetryMode) nextRoundMap.set(currentCardId, 'all');
+  else nextRoundMap.delete(currentCardId);
   updateMeter();
   saveProgress();
+  toast('정답으로 처리했습니다', 'good');
+  advance();                 // 직접 판단해서 인정한 것이니 기다리지 않고 바로 다음 문제로
 }
 
 function checkFull() {
