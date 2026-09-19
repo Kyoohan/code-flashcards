@@ -698,6 +698,17 @@ pre.answer-code {
   border-radius: 8px; padding: 9px 11px; white-space: pre; overflow-x: auto; max-height: 96px;
 }
 .nb-item .c mark { background: rgba(139,133,255,.3); color: #cfccff; border-radius: 3px; }
+.batch-quick { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.batch-n { width: 64px; text-align: center; padding: 7px 8px; }
+.batch-quick .chip-btn { margin-left: auto; }
+.batch-item {
+  display: flex; gap: 11px; align-items: center; padding: 11px 13px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--sunken); transition: border-color .15s, background .15s;
+}
+.batch-item.on { border-color: var(--accent); background: var(--accent-soft); }
+.batch-item .cb { width: 16px; height: 16px; accent-color: var(--accent); flex: 0 0 auto; }
+.batch-item .t { font-size: 13px; font-weight: 600; }
+.batch-item .d { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
 
 /* 다이얼로그 / 토스트 */
 .dlg-msg { font-size: 13.5px; line-height: 1.65; color: var(--ink-2); white-space: pre-wrap; }
@@ -803,6 +814,10 @@ pre.answer-code {
         <div class="rail-group">
           <div class="rail-label">학습</div>
           <div class="rail-actions">
+            <button class="act wide" id="btn-recent">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
+              최근 추가한 카드만 학습</button>
+            <div class="fav-note wide" id="recent-note">추가 묶음 없음</div>
             <button class="act wide" id="btn-fav-review">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.6l2.5 5.2 5.7.8-4.1 4 1 5.7-5.1-2.7-5.1 2.7 1-5.7-4.1-4 5.7-.8z"/></svg>
               즐겨찾기만 복습</button>
@@ -895,6 +910,7 @@ pre.answer-code {
           <span class="badge" id="badge-progress" hidden></span>
           <span class="badge bad" id="badge-retry" hidden>오답 포함</span>
           <span class="badge fav" id="badge-fav" hidden>즐겨찾기 복습</span>
+          <span class="badge accent" id="badge-scope" hidden></span>
           <span class="badge ghost" id="badge-queue"></span>
         </div>
 
@@ -1117,6 +1133,34 @@ pre.answer-code {
   </div>
 </div>
 
+<!-- ── 최근 추가 묶음 선택 ─────────────────────────────── -->
+<div class="modal" id="batch-modal" hidden data-liquid-ignore>
+  <div class="sheet md">
+    <div class="sheet-head">
+      <div>
+        <h3>최근 추가한 카드만 학습</h3>
+        <div class="sub">한 번에 추가한 카드가 한 묶음입니다. 학습할 묶음을 고르세요</div>
+      </div>
+      <button class="icon-btn" data-close="batch-modal" aria-label="닫기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="sheet-body">
+      <div class="batch-quick">
+        <span class="ctl-label" style="margin:0">최근</span>
+        <input class="text-input batch-n" id="batch-n" type="number" min="1" value="1" aria-label="최근 묶음 개수">
+        <span class="ctl-label" style="margin:0">개 묶음</span>
+        <button class="chip-btn" id="batch-all" type="button">전체 선택</button>
+      </div>
+      <div class="nb-list" id="batch-list"></div>
+    </div>
+    <div class="sheet-foot">
+      <div class="left" id="batch-status"></div>
+      <button class="btn btn-primary btn-sm" id="batch-start">학습 시작</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── 범용 다이얼로그 ─────────────────────────────────── -->
 <div class="modal" id="dlg" hidden data-liquid-ignore>
   <div class="sheet sm">
@@ -1151,6 +1195,7 @@ const LEGACY_PROG  = 'fc_progress_v8';
 const cardsKey = id => `fc_cards_v1_${id}`;
 const progKey  = id => `fc_progress_v1_${id}`;
 const statsKey = id => `fc_stats_v1_${id}`;
+const batchesKey = id => `fc_batches_v1_${id}`;   // 덱별 추가 묶음 목록 [{id, at, label}]
 
 const $  = id => document.getElementById(id);
 const genId = p => `${p}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -1310,6 +1355,7 @@ function normalizeCard(raw) {
     term: String((raw && raw.term) || ''),
     blanks: [],
   };
+  if (raw && raw.batchId) card.batchId = String(raw.batchId);   // 한 번에 추가된 묶음 표시
   if (raw && Array.isArray(raw.blanks) && raw.blanks.length) {
     card.blanks = sanitizeBlanks(raw.blanks, card.term);
   } else if (/\{\{[\s\S]*?\}\}/.test(card.term)) {
@@ -1859,6 +1905,7 @@ function collectState() {
       cards: safeParse(localStorage.getItem(cardsKey(d.id)), []),
       progress: safeParse(localStorage.getItem(progKey(d.id)), null),
       stats: safeParse(localStorage.getItem(statsKey(d.id)), []),
+      batches: safeParse(localStorage.getItem(batchesKey(d.id)), []),
     };
   }
   return { version: 3, deckList, activeDeckId, decks };
@@ -1874,6 +1921,7 @@ function applyState(data) {
     localStorage.setItem(cardsKey(d.id), JSON.stringify(s.cards || []));
     if (s.progress) localStorage.setItem(progKey(d.id), JSON.stringify(s.progress));
     localStorage.setItem(statsKey(d.id), JSON.stringify(s.stats || []));
+    localStorage.setItem(batchesKey(d.id), JSON.stringify(s.batches || []));
   }
   return true;
 }
@@ -2202,6 +2250,36 @@ let isRetryMode = false;
 let statsMap = new Map();
 let roundTotal = 0;
 let favMode = false;
+let batchScope = null;        // Set<batchId> — 이 묶음들만 학습 중이면 설정, 전체 학습이면 null
+let batches = [];             // 현재 덱의 추가 묶음 [{id, at, label}]
+const LEGACY_BATCH = '__legacy';   // 묶음 표시가 없는 옛 카드들을 하나의 묶음으로 취급
+
+function loadBatches() {
+  batches = safeParse(localStorage.getItem(batchesKey(activeDeckId)), []);
+  if (!Array.isArray(batches)) batches = [];
+}
+function saveBatches() { localStorage.setItem(batchesKey(activeDeckId), JSON.stringify(batches)); gist.schedule(); }
+/** 새 묶음 등록 — 한 번의 추가 동작(가져오기, 편집기 세션)마다 하나 */
+function registerBatch(label) {
+  const id = genId('batch');
+  batches.push({ id, at: Date.now(), label: String(label || '추가').slice(0, 60) });
+  saveBatches();
+  return id;
+}
+const cardBatch = c => c.batchId || LEGACY_BATCH;
+/** 묶음별 카드 수 — 비어 있는 묶음은 목록에서 빠진다 */
+function batchSummary() {
+  const count = new Map();
+  allCards.forEach(c => count.set(cardBatch(c), (count.get(cardBatch(c)) || 0) + 1));
+  const list = batches.filter(b => count.get(b.id)).map(b => ({ ...b, count: count.get(b.id) }));
+  if (count.get(LEGACY_BATCH)) list.unshift({ id: LEGACY_BATCH, at: 0, label: '이전에 추가한 카드', count: count.get(LEGACY_BATCH) });
+  return list.sort((a, b) => b.at - a.at);   // 최신 묶음이 앞
+}
+const inScope = c => !batchScope || batchScope.has(cardBatch(c));
+/** 현재 학습 범위(묶음·즐겨찾기)에 드는 카드 id */
+function scopedCardIds() {
+  return allCards.filter(inScope).map(c => c.id);
+}
 
 let bs = { inputs: [], locked: new Set(), wrong: new Set(), frozen: new Set(), revealed: new Set(), lastWrong: new Map(), open: 0 };
 
@@ -2250,6 +2328,7 @@ function ensureDeck() {
 }
 
 function loadCards() {
+  loadBatches();
   const raw = safeParse(localStorage.getItem(cardsKey(activeDeckId)), []);
   allCards = (Array.isArray(raw) ? raw : []).map(normalizeCard);
   cardMap = new Map(allCards.map(c => [c.id, c]));
@@ -2290,7 +2369,7 @@ function saveProgress() {
     currentRound, activeQueue, roundTotal,
     nextRoundMap: serMap(nextRoundMap),
     prevWrongMap: serMap(prevWrongMap),
-    currentCardId, isRetryMode, favMode, savedAt: Date.now(),
+    currentCardId, isRetryMode, favMode, batchScope: batchScope ? [...batchScope] : null, savedAt: Date.now(),
   }));
   stampSave();
   fsaSync();
@@ -2323,7 +2402,7 @@ function onCardsChanged() {
 
   // 진행 중 라운드에 새로 추가된 카드는 어느 목록에도 없으므로 현재 대기열에 편입한다
   const known = new Set([...activeQueue, ...nextRoundMap.keys(), ...prevWrongMap.keys(), currentCardId]);
-  const fresh = allCards.map(c => c.id).filter(id => !known.has(id));
+  const fresh = allCards.filter(c => !known.has(c.id) && inScope(c) && (!favMode || favCount(c) > 0)).map(c => c.id);
   reconcile();
   if (fresh.length) { activeQueue.push(...fresh); roundTotal += fresh.length; }
 
@@ -2333,6 +2412,7 @@ function onCardsChanged() {
   }
   updateMeter();
   updateFavUI();
+  updateScopeUI();
   saveProgress();
 }
 
@@ -2568,6 +2648,101 @@ function updateFavUI() {
     ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>복습 끝내기'
     : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="${STAR_PATH}"/></svg>즐겨찾기만 복습`;
   $('badge-fav').hidden = !favMode;
+}
+
+/** 묶음 학습 범위 표시 (레일 버튼·안내·스테이지 배지) */
+function updateScopeUI() {
+  const list = batchSummary();
+  const btn = $('btn-recent');
+  const note = $('recent-note');
+  if (batchScope) {
+    const n = list.filter(b => batchScope.has(b.id)).length;
+    const cards = allCards.filter(inScope).length;
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>전체 카드로 돌아가기';
+    note.textContent = `묶음 ${n}개 · 카드 ${cards}장만 학습 중`;
+    $('badge-scope').hidden = false;
+    $('badge-scope').textContent = `최근 추가 ${n}묶음`;
+  } else {
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>최근 추가한 카드만 학습';
+    note.textContent = list.length ? `추가 묶음 ${list.length}개` : '추가 묶음 없음';
+    $('badge-scope').hidden = true;
+  }
+  btn.disabled = !batchScope && list.length === 0;
+}
+
+/* ── 묶음 선택 모달 ─────────────────────────────────────── */
+let pickerChecked = new Set();
+function openBatchPicker() {
+  const list = batchSummary();
+  if (!list.length) { toast('아직 추가된 카드 묶음이 없습니다', 'bad'); return; }
+  // 기본값: 현재 범위가 있으면 그대로, 없으면 가장 최근 1개
+  pickerChecked = new Set(batchScope ? [...batchScope].filter(id => list.some(b => b.id === id)) : [list[0].id]);
+  if (!pickerChecked.size) pickerChecked = new Set([list[0].id]);
+  $('batch-n').value = String(pickerChecked.size);
+  $('batch-n').max = String(list.length);
+  renderBatchList();
+  $('batch-modal').hidden = false;
+}
+function renderBatchList() {
+  const list = batchSummary();
+  const host = $('batch-list');
+  host.innerHTML = '';
+  list.forEach((b, i) => {
+    const row = document.createElement('label');
+    row.className = 'batch-item' + (pickerChecked.has(b.id) ? ' on' : '');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.className = 'cb'; cb.checked = pickerChecked.has(b.id);
+    cb.addEventListener('change', () => {
+      if (cb.checked) pickerChecked.add(b.id); else pickerChecked.delete(b.id);
+      row.classList.toggle('on', cb.checked);
+      updateBatchStatus();
+    });
+    const body = document.createElement('div');
+    body.className = 'body';
+    const t = document.createElement('div');
+    t.className = 't';
+    t.textContent = (i === 0 && b.id !== LEGACY_BATCH ? '최근 · ' : '') + b.label;
+    const d = document.createElement('div');
+    d.className = 'd';
+    d.textContent = `${b.count}장` + (b.at ? ' · ' + new Date(b.at).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '');
+    body.append(t, d);
+    row.append(cb, body);
+    host.appendChild(row);
+  });
+  updateBatchStatus();
+}
+function updateBatchStatus() {
+  const list = batchSummary();
+  const cards = list.filter(b => pickerChecked.has(b.id)).reduce((a, b) => a + b.count, 0);
+  $('batch-status').textContent = `묶음 ${pickerChecked.size}개 · 카드 ${cards}장`;
+  $('batch-start').textContent = cards ? `${cards}장 학습 시작` : '묶음을 선택하세요';
+  $('batch-start').disabled = cards === 0;
+}
+/** 최근 N개 묶음 선택 */
+function pickRecent(n) {
+  const list = batchSummary();
+  pickerChecked = new Set(list.slice(0, Math.max(0, Math.min(n, list.length))).map(b => b.id));
+  renderBatchList();
+}
+
+function startBatchScope(ids) {
+  batchScope = new Set(ids);
+  favMode = false;
+  currentCardId = null;
+  nextRoundMap.clear();
+  prevWrongMap.clear();
+  updateFavUI();
+  updateScopeUI();
+  const cardIds = scopedCardIds();
+  if (!cardIds.length) { batchScope = null; updateScopeUI(); toast('선택한 묶음에 카드가 없습니다', 'bad'); return; }
+  startRound(1, cardIds);
+  toast(`최근 추가한 ${cardIds.length}장만 학습합니다`, 'good');
+}
+function clearBatchScope() {
+  batchScope = null;
+  clearProgress();
+  boot(true);
+  toast('전체 카드로 돌아왔습니다');
 }
 
 function onBlankKey(e) {
@@ -2882,7 +3057,7 @@ async function boot(freshStart = false) {
   renderDeckSelect();
   updateBrand();
 
-  if (!allCards.length) { favMode = false; updateFavUI(); showEmpty(); return; }
+  if (!allCards.length) { favMode = false; batchScope = null; updateFavUI(); updateScopeUI(); showEmpty(); return; }
   reconcile();
   updateFavUI();
 
@@ -2899,8 +3074,10 @@ async function boot(freshStart = false) {
       currentCardId = p.currentCardId;
       isRetryMode = !!p.isRetryMode;
       favMode = !!p.favMode;
+      batchScope = Array.isArray(p.batchScope) && p.batchScope.length ? new Set(p.batchScope) : null;
       reconcile();
       updateFavUI();
+      updateScopeUI();
       if (currentCardId && cardMap.has(currentCardId) && activeQueue[0] === currentCardId) showCard();
       else nextCard();
       updateMeter();
@@ -2908,7 +3085,9 @@ async function boot(freshStart = false) {
     }
   }
   favMode = false;
+  batchScope = null;
   updateFavUI();
+  updateScopeUI();
   startRound(1, allCards.map(c => c.id));
 }
 
@@ -2941,11 +3120,26 @@ $('answer-input').addEventListener('keydown', e => {
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter' || e.ctrlKey || e.metaKey) return;
   if ($('btn-next').hidden) return;
-  if (!$('editor-modal').hidden || !$('nb-modal').hidden || !$('stats-modal').hidden || !$('import-modal').hidden || !$('dlg').hidden) return;
+  if (!$('editor-modal').hidden || !$('nb-modal').hidden || !$('stats-modal').hidden || !$('import-modal').hidden || !$('batch-modal').hidden || !$('dlg').hidden) return;
   const a = document.activeElement;
   if (a === $('answer-input') || bs.inputs.includes(a)) return;
   e.preventDefault();
   advance();
+});
+
+$('btn-recent').addEventListener('click', () => {
+  if (batchScope) clearBatchScope();
+  else openBatchPicker();
+});
+$('batch-n').addEventListener('input', () => {
+  const n = parseInt($('batch-n').value, 10);
+  if (n > 0) pickRecent(n);
+});
+$('batch-all').addEventListener('click', () => pickRecent(batchSummary().length));
+$('batch-start').addEventListener('click', () => {
+  if (!pickerChecked.size) return;
+  $('batch-modal').hidden = true;
+  startBatchScope([...pickerChecked]);
 });
 
 $('btn-fav-review').addEventListener('click', () => {
@@ -2959,10 +3153,12 @@ $('btn-fav-review').addEventListener('click', () => {
   const ids = favCardIds();
   if (!ids.length) { toast('먼저 빈칸 옆 별표로 즐겨찾기를 추가하세요', 'bad'); return; }
   favMode = true;
+  batchScope = null;
   currentCardId = null;
   nextRoundMap.clear();
   prevWrongMap.clear();
   updateFavUI();
+  updateScopeUI();
   startRound(1, ids);
   toast(`즐겨찾기 ${deckFavTotal()}개만 복습합니다`, 'good');
 });
@@ -3120,7 +3316,7 @@ document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   if (!$('dlg').hidden) { closeDlg(null); return; }
   if (!$('editor-modal').hidden) { closeEditor(); return; }
-  ['import-modal', 'nb-modal', 'stats-modal'].forEach(id => { if (!$(id).hidden) $(id).hidden = true; });
+  ['batch-modal', 'import-modal', 'nb-modal', 'stats-modal'].forEach(id => { if (!$(id).hidden) $(id).hidden = true; });
 });
 
 /* ============================================================
@@ -3136,7 +3332,9 @@ const termEl = $('edit-term');
 const mirrorEl = $('code-mirror');
 const chipEl = $('float-chip');
 
+let editorBatchId = null;
 function openEditor() {
+  editorBatchId = null;
   tempCards = allCards.map(c => ({ ...c, blanks: (c.blanks || []).map(b => ({ ...b })) }));
   editIndex = -1;
   editBlanks = [];
@@ -3436,7 +3634,8 @@ function commitCard({ silent = false } = {}) {
   }
   const blanks = sanitizeBlanks(editBlanks, term);
   if (editIndex === -1) {
-    tempCards.push({ id: genId('card'), definition: def, term, blanks });
+    if (!editorBatchId) editorBatchId = registerBatch('직접 추가');   // 이 편집 세션에서 만든 카드는 한 묶음
+    tempCards.push({ id: genId('card'), definition: def, term, blanks, batchId: editorBatchId });
     editIndex = tempCards.length - 1;
   } else {
     const prev = tempCards[editIndex];
@@ -3614,7 +3813,9 @@ function setImportStage(stage) {
   }
 }
 
+let importSourceName = '';
 function showImportPreview(cards, name) {
+  importSourceName = name || '가져오기';
   importCards = cards;
   importPicked = cards.map(() => true);
   importMode = 'append';
@@ -3664,6 +3865,9 @@ function updateImportStatus() {
 async function applyImport(cards, mode) {
   $('import-modal').hidden = true;
   $('editor-modal').hidden = true;
+  if (mode === 'replace') { batches = []; saveBatches(); }   // 기존 카드가 사라지니 묶음 목록도 비운다
+  const batchId = registerBatch(importSourceName.replace(/\.json$/i, ''));
+  cards = cards.map(c => ({ ...c, batchId }));
   if (mode === 'replace') {
     allCards = cards;
     saveCards();
@@ -3986,21 +4190,25 @@ $('nb-import').addEventListener('click', async () => {
   const picked = nbCards.filter((_, i) => nbPicked[i]);
   if (!picked.length) return;
   const cards = picked.map(c => normalizeCard({ id: genId('card'), definition: c.definition, term: c.term, blanks: c.blanks }));
+  // 새 덱이면 덱을 먼저 만들어야 묶음이 그 덱에 등록된다 — 아래 분기에서 각각 처리
 
   if (nbOpts.target === 'new') {
     const name = ($('nb-deck-name').value || '').trim() || nbFileName;
     const id = genId('deck');
     deckList.push({ id, name, subtitle: `노트북에서 가져옴 · ${cards.length}장`, createdAt: Date.now() });
     persistDecks();
-    localStorage.setItem(cardsKey(id), JSON.stringify(cards));
     activeDeckId = id;
     localStorage.setItem(ACTIVE_KEY, id);
+    batches = [];
+    const batchId = registerBatch(nbFileName);
+    localStorage.setItem(cardsKey(id), JSON.stringify(cards.map(c => ({ ...c, batchId }))));
     currentCardId = null; activeQueue = []; nextRoundMap.clear(); prevWrongMap.clear();
     $('nb-modal').hidden = true;
     await boot(true);
     toast(`"${name}" 덱에 ${cards.length}장을 만들었습니다`, 'good');
   } else {
-    allCards = allCards.concat(cards);
+    const batchId = registerBatch(nbFileName);
+    allCards = allCards.concat(cards.map(c => ({ ...c, batchId })));
     saveCards();
     onCardsChanged();
     $('nb-modal').hidden = true;
