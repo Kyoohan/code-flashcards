@@ -1001,7 +1001,6 @@ pre.answer-code {
     <div class="sheet-foot">
       <div class="left" id="editor-status"></div>
       <button class="btn btn-quiet btn-sm" id="btn-del-card">카드 삭제</button>
-      <button class="btn btn-primary btn-sm" id="btn-save-card">저장</button>
     </div>
   </div>
 </div>
@@ -3167,6 +3166,11 @@ function openEditor() {
 let editorOpenSnapshot = null;
 function closeEditor() {
   flushAutoSave();
+  // 설명이나 코드 한쪽만 적힌 새 카드는 저장되지 않은 채 사라지므로 알려준다
+  if (editIndex === -1) {
+    const def = $('edit-def').value.trim(), term = termEl.value.trim();
+    if ((def && !term) || (!def && term)) toast('설명과 코드가 모두 있어야 카드로 저장됩니다 — 이번 입력은 저장되지 않았습니다', 'bad');
+  }
   $('editor-modal').hidden = true;
   // 지금 풀고 있던 카드를 고쳤다면 스테이지도 새 내용으로 다시 그린다
   if (currentCardId && cardMap.has(currentCardId)) {
@@ -3437,7 +3441,9 @@ function commitCard({ silent = false } = {}) {
   const def = $('edit-def').value.trim();
   const term = termEl.value.replace(/\s+$/, '');
   if (!def || !term) {
-    if (!silent) toast('설명과 정답 코드를 모두 입력하세요', 'bad');
+    // 한쪽만 채워진 상태 — 저장 버튼이 없으므로 왜 저장이 안 되는지 상태 줄로 알린다
+    if (def || term) editorStatus(!def ? '설명을 채우면 저장됩니다' : '정답 코드를 채우면 저장됩니다');
+    else editorStatus('변경 사항은 자동으로 저장됩니다');
     return false;
   }
   const blanks = sanitizeBlanks(editBlanks, term);
@@ -3486,10 +3492,7 @@ function flushAutoSave() {
   commitCard({ silent: true });
 }
 
-$('btn-save-card').addEventListener('click', () => {
-  clearTimeout(autoSaveTimer); autoSaveTimer = null;
-  if (commitCard()) toast('저장했습니다', 'good');
-});
+
 
 $('btn-del-card').addEventListener('click', async () => {
   clearTimeout(autoSaveTimer); autoSaveTimer = null;   // 지우려는 카드를 저장할 필요는 없다
