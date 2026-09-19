@@ -3111,12 +3111,16 @@ $('sel-density').addEventListener('change', e => { fx.density = e.target.value; 
 
 /* 모달 닫기 공통 */
 document.querySelectorAll('[data-close]').forEach(b => {
-  b.addEventListener('click', () => { $(b.dataset.close).hidden = true; });
+  b.addEventListener('click', () => {
+    if (b.dataset.close === 'editor-modal') closeEditor();
+    else $(b.dataset.close).hidden = true;
+  });
 });
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   if (!$('dlg').hidden) { closeDlg(null); return; }
-  ['import-modal', 'nb-modal', 'stats-modal', 'editor-modal'].forEach(id => { if (!$(id).hidden) $(id).hidden = true; });
+  if (!$('editor-modal').hidden) { closeEditor(); return; }
+  ['import-modal', 'nb-modal', 'stats-modal'].forEach(id => { if (!$(id).hidden) $(id).hidden = true; });
 });
 
 /* ============================================================
@@ -3142,8 +3146,20 @@ function openEditor() {
   lastTermValue = '';
   renderCardList();
   refreshTermView();
+  $('editor-status').textContent = '변경 사항은 자동으로 저장됩니다';
+  editorOpenSnapshot = currentCardId ? JSON.stringify(cardMap.get(currentCardId) || null) : null;
   $('editor-modal').hidden = false;
   setTimeout(() => $('edit-def').focus(), 60);
+}
+let editorOpenSnapshot = null;
+function closeEditor() {
+  flushAutoSave();
+  $('editor-modal').hidden = true;
+  // 지금 풀고 있던 카드를 고쳤다면 스테이지도 새 내용으로 다시 그린다
+  if (currentCardId && cardMap.has(currentCardId)) {
+    const now = JSON.stringify(cardMap.get(currentCardId));
+    if (editorOpenSnapshot !== null && now !== editorOpenSnapshot) showCard();
+  }
 }
 $('btn-edit').addEventListener('click', openEditor);
 
@@ -3187,6 +3203,7 @@ function renderCardList() {
 $('editor-search').addEventListener('input', renderCardList);
 
 function loadCardIntoForm(i) {
+  flushAutoSave();
   editIndex = i;
   const c = tempCards[i];
   $('edit-def').value = c.definition;
@@ -3197,6 +3214,7 @@ function loadCardIntoForm(i) {
   refreshTermView();
 }
 $('btn-new-card').addEventListener('click', () => {
+  flushAutoSave();
   editIndex = -1;
   editBlanks = [];
   $('edit-def').value = '';
@@ -3249,8 +3267,11 @@ function refreshTermView() {
       star.innerHTML = `<svg viewBox="0 0 24 24" fill="${b.fav ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="${STAR_PATH}"/></svg>`;
       star.addEventListener('click', ev => {
         ev.stopPropagation();
-        if (b.fav) delete b.fav; else b.fav = true;
+        const cur = editBlanks[i];
+        if (!cur) return;
+        if (cur.fav) delete cur.fav; else cur.fav = true;
         refreshTermView();
+        autoSave(true);
       });
       const x = document.createElement('button');
       x.type = 'button';
@@ -3260,11 +3281,14 @@ function refreshTermView() {
         ev.stopPropagation();
         editBlanks.splice(i, 1);
         refreshTermView();
+        autoSave(true);
       });
       chip.append(t, star, x);
       chip.addEventListener('click', () => {
+        const cur = editBlanks[i];
+        if (!cur) return;
         termEl.focus();
-        termEl.setSelectionRange(b.start, b.end);
+        termEl.setSelectionRange(cur.start, cur.end);
         onSelectionChange();
       });
       chips.appendChild(chip);
@@ -3311,7 +3335,9 @@ termEl.addEventListener('input', () => {
   lastTermValue = next;
   pendingSel = null;
   refreshTermView();
+  autoSave();
 });
+$('edit-def').addEventListener('input', () => autoSave());
 
 function currentSelection() {
   const s = termEl.selectionStart, e = termEl.selectionEnd;
@@ -3362,6 +3388,7 @@ function makeBlankFromSelection() {
   refreshTermView();
   termEl.focus();
   termEl.setSelectionRange(sel.end, sel.end);
+  autoSave(true);
   toast('빈칸으로 지정했습니다', 'good');
 }
 $('btn-make-blank').addEventListener('click', makeBlankFromSelection);
@@ -3370,6 +3397,7 @@ $('btn-clear-blanks').addEventListener('click', () => {
   if (!editBlanks.length) return;
   editBlanks = [];
   refreshTermView();
+  autoSave(true);
   toast('빈칸을 모두 해제했습니다');
 });
 termEl.addEventListener('keydown', e => {
@@ -3387,33 +3415,71 @@ termEl.addEventListener('keydown', e => {
     editBlanks = remapBlanks(editBlanks, before, termEl.value);
     lastTermValue = termEl.value;
     refreshTermView();
+    autoSave();
   }
 });
 
-$('btn-save-card').addEventListener('click', () => {
+/** 편집 중인 카드를 저장. silent 면 아직 채워지지 않은 카드는 조용히 건너뛴다 */
+function commitCard({ silent = false } = {}) {
   const def = $('edit-def').value.trim();
   const term = termEl.value.replace(/\s+$/, '');
-  if (!def || !term) { toast('설명과 정답 코드를 모두 입력하세요', 'bad'); return; }
+  if (!def || !term) {
+    if (!silent) toast('설명과 정답 코드를 모두 입력하세요', 'bad');
+    return false;
+  }
   const blanks = sanitizeBlanks(editBlanks, term);
   if (editIndex === -1) {
-    const card = { id: genId('card'), definition: def, term, blanks };
-    tempCards.push(card);
+    tempCards.push({ id: genId('card'), definition: def, term, blanks });
     editIndex = tempCards.length - 1;
   } else {
-    tempCards[editIndex] = { ...tempCards[editIndex], definition: def, term, blanks };
+    const prev = tempCards[editIndex];
+    // 바뀐 게 없으면 저장하지 않는다 (동기화·파일 쓰기를 아낀다)
+    if (prev.definition === def && prev.term === term && JSON.stringify(prev.blanks) === JSON.stringify(blanks)) {
+      editorStatus('저장됨');
+      return true;
+    }
+    tempCards[editIndex] = { ...prev, definition: def, term, blanks };
   }
-  editBlanks = blanks;
+  // editBlanks 를 새 배열로 갈아끼우면 칩의 클릭 핸들러가 옛 객체를 붙잡게 되므로 건드리지 않는다
   allCards = tempCards.map(normalizeCard);
   saveCards();
   onCardsChanged();
   updateFavUI();
   renderCardList();
-  $('editor-status').textContent = '저장됨';
-  setTimeout(() => { $('editor-status').textContent = ''; }, 1600);
-  toast('저장했습니다', 'good');
+  editorStatus('저장됨');
+  return true;
+}
+
+let autoSaveTimer = null;
+function editorStatus(text) {
+  const t = new Date();
+  $('editor-status').textContent = text === '저장됨'
+    ? `자동 저장됨 · ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`
+    : text;
+}
+/** 빈칸 지정처럼 분명한 동작은 즉시, 타이핑은 잠깐 멈추면 저장 */
+function autoSave(immediate = false) {
+  clearTimeout(autoSaveTimer);
+  const run = () => { autoSaveTimer = null; commitCard({ silent: true }); };
+  if (immediate) { run(); return; }
+  editorStatus('입력 중…');
+  autoSaveTimer = setTimeout(run, 700);
+}
+/** 카드를 바꾸거나 창을 닫기 전에 밀린 저장을 먼저 처리 */
+function flushAutoSave() {
+  if (autoSaveTimer === null) return;
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = null;
+  commitCard({ silent: true });
+}
+
+$('btn-save-card').addEventListener('click', () => {
+  clearTimeout(autoSaveTimer); autoSaveTimer = null;
+  if (commitCard()) toast('저장했습니다', 'good');
 });
 
 $('btn-del-card').addEventListener('click', async () => {
+  clearTimeout(autoSaveTimer); autoSaveTimer = null;   // 지우려는 카드를 저장할 필요는 없다
   if (editIndex === -1) { toast('삭제할 카드를 먼저 선택하세요', 'bad'); return; }
   if (!await confirmBox('카드 삭제', '이 카드를 삭제합니다.', '삭제')) return;
   tempCards.splice(editIndex, 1);
