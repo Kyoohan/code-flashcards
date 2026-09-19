@@ -1885,10 +1885,12 @@ function applyState(data) {
 const GIST_TOKEN_KEY = 'fc_gist_token_v1';
 const GIST_META_KEY  = 'fc_gist_meta_v1';
 const GIST_FILENAME  = 'code-flashcards.json';
+const GIST_DIRTY_KEY = 'fc_gist_dirty_v1';   // 아직 클라우드에 올리지 못한 로컬 변경이 있음
 const GH_API = 'https://api.github.com';
 
 const gist = (function () {
   let meta = safeParse(localStorage.getItem(GIST_META_KEY), null) || { id: null, etag: null, syncedAt: 0, login: null };
+  if (!meta.device) { meta.device = genId('dev'); localStorage.setItem(GIST_META_KEY, JSON.stringify(meta)); }
   let timer = null, inFlight = false, lastPushed = null, pendingConflict = false;
 
   const token = () => localStorage.getItem(GIST_TOKEN_KEY) || '';
@@ -1911,7 +1913,7 @@ const gist = (function () {
   }
 
   function payload() {
-    return { ...collectState(), updatedAt: Date.now(), app: 'code-flashcards' };
+    return { ...collectState(), updatedAt: Date.now(), device: meta.device, app: 'code-flashcards' };
   }
 
   /** Gist 파일 내용 읽기 (1MB 초과 시 truncated → raw_url 로 재요청) */
@@ -2010,12 +2012,13 @@ const gist = (function () {
 
   async function push({ force = false } = {}) {
     if (!linked() || inFlight) return;
+    if (pendingConflict && !force) return;   // 어느 쪽을 남길지 답하기 전엔 자동 업로드가 끼어들면 안 된다
     // updatedAt 은 매번 달라지므로 변경 감지에서는 제외한다 (제외하지 않으면 항상 다르게 보임)
     const state = collectState();
     const key = JSON.stringify(state);
     if (!force && key === lastPushed) { status('synced'); return; }
     if (!navigator.onLine) { status('offline'); return; }
-    const body = JSON.stringify({ ...state, updatedAt: Date.now(), app: 'code-flashcards' }, null, 2);
+    const body = JSON.stringify({ ...state, updatedAt: Date.now(), device: meta.device, app: 'code-flashcards' }, null, 2);
 
     inFlight = true;
     status('syncing');
@@ -2025,11 +2028,14 @@ const gist = (function () {
         if (chk.gone) { meta.id = null; saveMeta(); status('error', 'Gist 를 찾을 수 없음'); inFlight = false; return; }
         if (chk.changed && chk.gist) {
           const remote = await readFile(chk.gist);
-          // 원격이 우리가 올린 것보다 최신이면 덮어쓰기 전에 물어본다
-          if (remote && remote.updatedAt && remote.updatedAt > meta.syncedAt + 1000) {
+          // 원격이 이 기기가 올린 것(응답을 못 받고 끊긴 업로드 등)이면 그냥 이어서 올린다.
+          // 다른 기기가 올린 더 최신 데이터일 때만 덮어쓰기 전에 물어본다.
+          const ours = remote && remote.device && remote.device === meta.device;
+          if (!ours && remote && remote.updatedAt && remote.updatedAt > meta.syncedAt + 1000) {
             meta.etag = chk.etag; saveMeta();
             inFlight = false;
             pendingConflict = true;
+            clearTimeout(timer); timer = null;   // 이미 예약된 자동 업로드가 답변 전에 덮어쓰지 않도록
             status('conflict');
             await resolveConflict(remote);
             return;
@@ -2048,18 +2054,21 @@ const gist = (function () {
       meta.syncedAt = Date.now();
       saveMeta();
       lastPushed = key;
+      localStorage.removeItem(GIST_DIRTY_KEY);
       status('synced');
     } catch (e) {
       status(navigator.onLine ? 'error' : 'offline');
     } finally { inFlight = false; }
   }
 
-  async function pull({ silent = false } = {}) {
+  async function pull({ silent = false, ifChanged = false } = {}) {
     if (!linked()) return false;
     if (!navigator.onLine) { status('offline'); return false; }
     status('syncing', '불러오는 중…');
     try {
-      const res = await api(`/gists/${meta.id}`);
+      const headers = ifChanged && meta.etag ? { 'If-None-Match': meta.etag } : {};
+      const res = await api(`/gists/${meta.id}`, { headers });
+      if (res.status === 304) { status('synced'); return 'same'; }     // 마지막 동기화 이후 변경 없음
       if (res.status === 404) { status('error', 'Gist 를 찾을 수 없음'); return false; }
       if (res.status === 401) { status('error', '토큰이 만료되었습니다'); return false; }
       if (!res.ok) { status('error', `불러오기 실패 (${res.status})`); return false; }
@@ -2071,6 +2080,7 @@ const gist = (function () {
       saveMeta();
       if (!applyState(data)) { status('error', '형식이 올바르지 않습니다'); return false; }
       lastPushed = null;
+      localStorage.removeItem(GIST_DIRTY_KEY);
       status('synced');
       if (!silent) toast('클라우드에서 불러왔습니다', 'good');
       return true;
@@ -2089,7 +2099,7 @@ const gist = (function () {
       cancelText: '이 기기 것으로 덮어쓰기',
     });
     pendingConflict = false;
-    if (r) { await pull(); await boot(true); }
+    if (r) { await pull(); await boot(false); }
     else { await push({ force: true }); toast('이 기기 내용으로 덮어썼습니다'); }
   }
 
@@ -2103,12 +2113,15 @@ const gist = (function () {
     /** 데이터가 바뀔 때마다 호출 — 디바운스해서 한 번만 올린다 */
     schedule() {
       if (!linked() || pendingConflict) return;
+      localStorage.setItem(GIST_DIRTY_KEY, '1');
       clearTimeout(timer);
-      timer = setTimeout(() => push(), 6000);
+      timer = setTimeout(() => push(), 2500);
     },
+    get dirty() { return localStorage.getItem(GIST_DIRTY_KEY) === '1'; },
     unlink() {
       localStorage.removeItem(GIST_TOKEN_KEY);
       localStorage.removeItem(GIST_META_KEY);
+      localStorage.removeItem(GIST_DIRTY_KEY);
       meta = { id: null, etag: null, syncedAt: 0, login: null };
       lastPushed = null;
       clearTimeout(timer);
@@ -3057,7 +3070,7 @@ $('sync-connect').addEventListener('click', async () => {
         okText: '클라우드 것 가져오기',
         cancelText: '이 기기 것 올리기',
       });
-      if (useRemote) { if (await gist.pull()) await boot(true); }
+      if (useRemote) { if (await gist.pull()) await boot(false); }
       else { await gist.push({ force: true }); toast('이 기기 내용을 올렸습니다', 'good'); }
     } else {
       toast('Gist를 만들고 연결했습니다', 'good');
@@ -3069,7 +3082,7 @@ $('sync-connect').addEventListener('click', async () => {
   }
 });
 $('sync-push').addEventListener('click', async () => { await gist.push({ force: true }); toast('올렸습니다', 'good'); });
-$('sync-pull').addEventListener('click', async () => { if (await gist.pull()) await boot(true); });
+$('sync-pull').addEventListener('click', async () => { if (await gist.pull()) await boot(false); });
 $('sync-unlink').addEventListener('click', async () => {
   if (!await confirmBox('연결 해제', '이 브라우저에 저장된 토큰을 지웁니다. Gist와 카드 데이터는 그대로 남습니다.', '해제')) return;
   gist.unlink();
@@ -3077,8 +3090,8 @@ $('sync-unlink').addEventListener('click', async () => {
 });
 window.addEventListener('online', () => gist.refresh());
 window.addEventListener('offline', () => gist.refresh());
-// 탭을 닫기 전에 밀린 변경분을 마지막으로 밀어 올린다
-window.addEventListener('pagehide', () => { if (gist.linked) gist.push(); });
+// 탭을 닫을 때 올리는 건 중간에 끊겨 클라우드와 로컬 기록만 어긋나게 하므로 하지 않는다.
+// 미처 못 올린 변경은 dirty 플래그로 남아 다음 실행 때 먼저 올라간다.
 
 /* 효과 토글 */
 function syncSwitch(el, on) { el.setAttribute('aria-checked', on ? 'true' : 'false'); }
@@ -3999,12 +4012,18 @@ $('nb-import').addEventListener('click', async () => {
    16. 시작
    ============================================================ */
 (async function () {
-  // 연결되어 있으면 로컬보다 클라우드가 최신일 수 있으니 먼저 받아온다
+  await boot(false);                       // 로컬 상태로 먼저 그린다 — 동기화가 늦거나 물어봐도 화면은 살아 있다
   if (gist.linked) {
     gist.refresh();
-    await gist.pull({ silent: true });
+    if (gist.dirty) {
+      // 아직 올리지 못한 로컬 변경이 있다 → 클라우드로 덮어쓰지 말고 먼저 올린다.
+      // 다른 기기가 그 사이 저장했다면 push 가 충돌을 감지해 어느 쪽을 남길지 묻는다.
+      await gist.push();
+    } else {
+      const r = await gist.pull({ silent: true, ifChanged: true });
+      if (r === true) await boot(false);   // 클라우드에 새 내용이 있을 때만 다시 그린다
+    }
   }
-  await boot(false);
   gist.refresh();
   bg.boot().then(() => { if (!bg.ok) $('gpu-note').textContent = '정적 배경 사용 중'; });
 })();

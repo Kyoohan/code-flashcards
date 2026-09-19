@@ -60,7 +60,7 @@
 
 - 토큰은 **classic personal access token**에 **`gist` 권한만** 주어 만드세요. ([바로 만들기](https://github.com/settings/tokens/new?scopes=gist&description=code-flashcards%20sync) — 권한이 미리 선택되어 열립니다.) 만료일을 지정해 두시길 권합니다.
 - 토큰은 **그 브라우저의 `localStorage`에만** 저장되며, Gist 내용에는 절대 포함되지 않습니다. 다른 방문자는 읽을 수 없습니다.
-- 카드를 고치면 몇 초 뒤 자동으로 올라갑니다. 앱을 열 때는 클라우드 쪽을 먼저 받아옵니다.
+- 카드를 고치면 몇 초 뒤 자동으로 올라갑니다. 미처 올리기 전에 탭을 닫아도 그 변경은 이 기기에 남아 있다가 다음에 열 때 먼저 올라갑니다. 올릴 게 없을 때만 클라우드 쪽을 받아옵니다.
 - 두 기기에서 각각 편집해 어긋나면 어느 쪽을 남길지 물어봅니다.
 - 토큰을 지우려면 **연결 해제**를, 완전히 무효화하려면 [GitHub 토큰 설정](https://github.com/settings/tokens)에서 삭제하세요.
 
