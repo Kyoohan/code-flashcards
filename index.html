@@ -420,13 +420,7 @@ textarea.code-surface::placeholder { color: #5a6070; }
 .blank-input.ok { background: rgba(69,214,163,.16); border-bottom-color: #45d6a3; color: #7defc0; pointer-events: none; }
 .blank-input.ng { background: rgba(255,112,112,.18); border-bottom-color: #ff7070; color: #ffb3b3; }
 .blank-input.revealed { background: rgba(229,161,58,.16); border-bottom-color: #e5a13a; color: #f5c66b; pointer-events: none; }
-/* 자동 진행 중임을 버튼 밑줄이 채워지며 알린다 */
-.btn-next { position: relative; overflow: hidden; }
-.btn-next.auto::after {
-  content: ''; position: absolute; left: 0; bottom: 0; height: 3px; width: 0;
-  background: rgba(255,255,255,.55); animation: autoAdvance .5s linear forwards;
-}
-@keyframes autoAdvance { to { width: 100%; } }
+
 .blank-input.frozen { background: rgba(69,214,163,.1); border-bottom-color: rgba(69,214,163,.5); color: #6fd8ae; pointer-events: none; }
 #inline-hint { font-size: 12px; min-height: 1.5em; margin-top: 8px; font-weight: 600; }
 #inline-hint.ok { color: var(--good); }
@@ -2364,23 +2358,7 @@ function nextCard() {
   isRetryMode = false;
   showCard();
 }
-let advanceTimer = null;
-const AUTO_ADVANCE_MS = 500;
-/** 스스로 맞혀서 끝난 카드는 잠깐 뒤 자동으로 넘어간다. 정답을 공개받은 카드는 읽을 수 있게 머문다. */
-function scheduleAdvance() {
-  clearTimeout(advanceTimer);
-  $('btn-next').classList.add('auto');
-  advanceTimer = setTimeout(() => {
-    advanceTimer = null;
-    if (!$('btn-next').hidden) advance();
-  }, AUTO_ADVANCE_MS);
-}
-function cancelAdvance() {
-  clearTimeout(advanceTimer);
-  advanceTimer = null;
-  $('btn-next').classList.remove('auto');
-}
-function advance() { cancelAdvance(); activeQueue.shift(); nextCard(); }
+function advance() { activeQueue.shift(); nextCard(); }
 
 function showEmpty() {
   $('question').innerHTML = '<span class="empty">아직 카드가 없습니다.\n왼쪽 <b>카드 편집</b>으로 직접 추가하거나, <b>노트북 가져오기</b>로 .ipynb 파일을 불러오세요.</span>';
@@ -2415,7 +2393,6 @@ function finishAll() {
 }
 
 function showCard() {
-  cancelAdvance();
   const card = cardMap.get(currentCardId);
   if (!card) { nextCard(); return; }
 
@@ -2729,7 +2706,6 @@ function finishBlankCard(hadWrong) {
   if (hadWrong) feedback('warn', '일부 오답', '틀린 빈칸만 다음 라운드에 다시 나옵니다.');
   else feedback('good', '전부 정답', isRetryMode ? '오답 기록이 있었지만 이번엔 모두 맞혔습니다.' : '완벽합니다.');
   toNext();
-  if (!bs.revealed.size) scheduleAdvance();
   updateMeter();
   saveProgress();
 }
@@ -2743,7 +2719,6 @@ function acceptFullCorrect(ta) {
   else nextRoundMap.delete(currentCardId);
   ta.disabled = true;
   toNext();
-  scheduleAdvance();
 }
 
 /** 전체 코드 모드의 오답 판정을 뒤집어 정답 처리 */
