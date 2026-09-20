@@ -2251,6 +2251,7 @@ let statsMap = new Map();
 let roundTotal = 0;
 let favMode = false;
 let batchScope = null;        // Set<batchId> — 이 묶음들만 학습 중이면 설정, 전체 학습이면 null
+let runSeen = new Set();      // 이번 학습이 시작된 뒤 한 번이라도 출제된 카드 id — 맞혀서 빠진 카드를 '새 카드'로 오인하지 않기 위해
 let batches = [];             // 현재 덱의 추가 묶음 [{id, at, label}]
 const LEGACY_BATCH = '__legacy';   // 묶음 표시가 없는 옛 카드들을 하나의 묶음으로 취급
 
@@ -2369,7 +2370,7 @@ function saveProgress() {
     currentRound, activeQueue, roundTotal,
     nextRoundMap: serMap(nextRoundMap),
     prevWrongMap: serMap(prevWrongMap),
-    currentCardId, isRetryMode, favMode, batchScope: batchScope ? [...batchScope] : null, savedAt: Date.now(),
+    currentCardId, isRetryMode, favMode, batchScope: batchScope ? [...batchScope] : null, runSeen: [...runSeen], savedAt: Date.now(),
   }));
   stampSave();
   fsaSync();
@@ -2392,6 +2393,7 @@ function reconcile() {
   for (const id of [...nextRoundMap.keys()]) if (!valid.has(id)) nextRoundMap.delete(id);
   for (const id of [...prevWrongMap.keys()]) if (!valid.has(id)) prevWrongMap.delete(id);
   for (const id of [...statsMap.keys()]) if (!valid.has(id)) statsMap.delete(id);
+  for (const id of [...runSeen]) if (!valid.has(id)) runSeen.delete(id);
 }
 
 /** 카드 목록이 바뀐 뒤 현재 세션과 정합성 맞추기 */
@@ -2401,10 +2403,11 @@ function onCardsChanged() {
   if (!currentCardId) { startRound(1, allCards.map(c => c.id)); return; }
 
   // 진행 중 라운드에 새로 추가된 카드는 어느 목록에도 없으므로 현재 대기열에 편입한다
-  const known = new Set([...activeQueue, ...nextRoundMap.keys(), ...prevWrongMap.keys(), currentCardId]);
-  const fresh = allCards.filter(c => !known.has(c.id) && inScope(c) && (!favMode || favCount(c) > 0)).map(c => c.id);
+  // 이번 학습에서 한 번도 출제되지 않은 카드만 '새 카드'다.
+  // 대기열에 없다는 것만으로 판단하면, 앞 라운드에서 맞혀 빠진 카드까지 다시 붙어 버린다.
+  const fresh = allCards.filter(c => !runSeen.has(c.id) && inScope(c) && (!favMode || favCount(c) > 0)).map(c => c.id);
   reconcile();
-  if (fresh.length) { activeQueue.push(...fresh); roundTotal += fresh.length; }
+  if (fresh.length) { activeQueue.push(...fresh); roundTotal += fresh.length; fresh.forEach(id => runSeen.add(id)); }
 
   if (!cardMap.has(currentCardId)) {
     if (activeQueue.length) { currentCardId = activeQueue[0]; showCard(); }
@@ -2432,6 +2435,7 @@ function normalize(str) {
 function startRound(n, ids) {
   currentRound = n;
   activeQueue = [...ids];
+  if (n === 1) runSeen = new Set(ids);   // 새 학습 시작 — 이후 라운드는 이 목록의 부분집합이므로 그대로 둔다
   roundTotal = activeQueue.length;
   prevWrongMap = new Map(nextRoundMap);
   nextRoundMap.clear();
@@ -3075,6 +3079,8 @@ async function boot(freshStart = false) {
       isRetryMode = !!p.isRetryMode;
       favMode = !!p.favMode;
       batchScope = Array.isArray(p.batchScope) && p.batchScope.length ? new Set(p.batchScope) : null;
+      // 예전 저장본에는 없을 수 있다 — 그때는 지금 있는 카드를 전부 본 것으로 쳐서 다시 붙지 않게 한다
+      runSeen = Array.isArray(p.runSeen) ? new Set(p.runSeen) : new Set(allCards.map(c => c.id));
       reconcile();
       updateFavUI();
       updateScopeUI();
