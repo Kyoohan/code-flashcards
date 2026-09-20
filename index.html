@@ -2916,15 +2916,14 @@ function acceptFullCorrect(ta) {
 /** 전체 코드 모드의 오답 판정을 뒤집어 정답 처리 */
 function acceptFull() {
   if (!fullAttempt) return;
-  const snap = fullAttempt; fullAttempt = null;
+  fullAttempt = null;
   recordOverride(currentCardId);
-  isRetryMode = snap.prevRetry;
-  if (snap.prevNext === undefined) nextRoundMap.delete(currentCardId);
-  else nextRoundMap.set(currentCardId, snap.prevNext);
-  $('badge-retry').hidden = !isRetryMode;
+  // 인정은 "이 카드는 맞았다"는 판단이므로, 같은 방문에서 먼저 틀렸던 기록까지 포함해
+  // 오답 상태를 통째로 지운다. 그대로 두면 다음 라운드에 다시 나와 오답 처리된 것처럼 보인다.
+  isRetryMode = false;
+  nextRoundMap.delete(currentCardId);
+  $('badge-retry').hidden = true;
   $('fb-accept').hidden = true;
-  if (isRetryMode) nextRoundMap.set(currentCardId, 'all');
-  else nextRoundMap.delete(currentCardId);
   updateMeter();
   saveProgress();
   toast('정답으로 처리했습니다', 'good');
@@ -2944,7 +2943,7 @@ function checkFull() {
     acceptFullCorrect(ta);
   } else {
     // 인정 버튼으로 되돌릴 수 있도록 이 시도 이전의 상태를 기억한다
-    fullAttempt = { prevRetry: isRetryMode, prevNext: nextRoundMap.has(currentCardId) ? nextRoundMap.get(currentCardId) : undefined };
+    fullAttempt = true;   // 이 카드 방문에서 오답 판정이 있었음 → 인정 버튼 활성
     lastFullWrong = normalize(ta.value);
     record(currentCardId, false);
     const fb = feedback('bad', '아직 다릅니다', '비교를 보고 고쳐서 다시 확인하세요. 그대로 다시 확인하면 정답을 보여줍니다.');
