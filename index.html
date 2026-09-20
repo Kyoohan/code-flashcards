@@ -897,6 +897,7 @@ pre.answer-code {
             </select>
           </div>
           <div class="hint" id="gpu-note" style="margin-top:6px"></div>
+          <div class="hint" id="build-note" style="margin-top:4px"></div>
         </div>
       </div>
     </aside>
@@ -2974,6 +2975,8 @@ function checkFull() {
 function giveUp() {
   const card = cardMap.get(currentCardId);
   if (!card) return;
+  $('fb-accept').hidden = true;   // 포기한 화면에서는 '인정'할 답이 없다
+  fullAttempt = null;
   if (hasBlanks(card)) {
     bs.inputs.forEach(inp => {
       const idx = Number(inp.dataset.i);
@@ -4224,6 +4227,13 @@ $('nb-import').addEventListener('click', async () => {
 /* ============================================================
    16. 시작
    ============================================================ */
+(function () {
+  // 어느 배포본을 보고 있는지 표시. 옛 캐시가 남아 있으면 이 시각으로 알 수 있다.
+  const el = $('build-note');
+  const d = new Date(document.lastModified);
+  if (el && !isNaN(d)) el.textContent = '빌드 ' + d.toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+})();
+
 (async function () {
   await boot(false);                       // 로컬 상태로 먼저 그린다 — 동기화가 늦거나 물어봐도 화면은 살아 있다
   if (gist.linked) {
