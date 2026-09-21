@@ -1941,7 +1941,7 @@ const GH_API = 'https://api.github.com';
 const gist = (function () {
   let meta = safeParse(localStorage.getItem(GIST_META_KEY), null) || { id: null, etag: null, syncedAt: 0, login: null };
   if (!meta.device) { meta.device = genId('dev'); localStorage.setItem(GIST_META_KEY, JSON.stringify(meta)); }
-  let timer = null, inFlight = false, lastPushed = null, pendingConflict = false;
+  let timer = null, timerDue = 0, inFlight = false, lastPushed = null, pendingConflict = false;
 
   const token = () => localStorage.getItem(GIST_TOKEN_KEY) || '';
   const linked = () => !!(token() && meta.id);
@@ -1988,6 +1988,7 @@ const gist = (function () {
       synced:   ['동기화됨', 'good'],
       conflict: ['다른 기기와 충돌', 'bad'],
       error:    ['오류', 'bad'],
+      ratelimit: ['요청 한도 대기 중', 'accent'],
       offline:  ['오프라인', 'bad'],
     };
     const [label, cls] = map[state] || map.off;
@@ -2098,6 +2099,7 @@ const gist = (function () {
         body: JSON.stringify({ files: { [GIST_FILENAME]: { content: body } } }),
       });
       if (res.status === 401) { status('error', '토큰이 만료되었습니다'); inFlight = false; return; }
+      if (res.status === 403 || res.status === 429) { inFlight = false; await handleForbidden(res); return; }
       if (!res.ok) { status('error', `저장 실패 (${res.status})`); inFlight = false; return; }
       const g = await res.json();
       meta.etag = res.headers.get('ETag');
@@ -2121,6 +2123,7 @@ const gist = (function () {
       if (res.status === 304) { status('synced'); return 'same'; }     // 마지막 동기화 이후 변경 없음
       if (res.status === 404) { status('error', 'Gist 를 찾을 수 없음'); return false; }
       if (res.status === 401) { status('error', '토큰이 만료되었습니다'); return false; }
+      if (res.status === 403 || res.status === 429) { await handleForbidden(res); return false; }
       if (!res.ok) { status('error', `불러오기 실패 (${res.status})`); return false; }
       const g = await res.json();
       const data = await readFile(g);
@@ -2138,6 +2141,29 @@ const gist = (function () {
       status(navigator.onLine ? 'error' : 'offline');
       return false;
     }
+  }
+
+  let retryTimer = null;
+  /** 403/429: 요청 한도 초과인지, 토큰 권한 문제인지 가려서 알린다. 한도면 기다렸다 자동 재시도 */
+  async function handleForbidden(res) {
+    let msg = '';
+    try { msg = String((await res.json()).message || ''); } catch (e) {}
+    const remaining = res.headers.get('X-RateLimit-Remaining');
+    const retryAfter = parseInt(res.headers.get('Retry-After') || '', 10);
+    const reset = parseInt(res.headers.get('X-RateLimit-Reset') || '', 10);
+    const rateLimited = res.status === 429 || /rate limit/i.test(msg) || remaining === '0';
+    if (rateLimited) {
+      // 2차 한도(쓰기 500회/시간)는 보통 1분 안에 풀린다. Retry-After 가 있으면 그걸 따른다.
+      let wait = retryAfter > 0 ? retryAfter : (reset > 0 ? Math.max(30, reset - Math.floor(Date.now() / 1000)) : 60);
+      wait = Math.min(wait, 900);
+      localStorage.setItem(GIST_DIRTY_KEY, '1');       // 로컬 변경은 그대로 남겨 두고
+      status('ratelimit', `GitHub 요청 한도 — ${wait}초 후 자동 재시도`);
+      clearTimeout(retryTimer);
+      retryTimer = setTimeout(() => push(), wait * 1000);
+      return;
+    }
+    // 권한 문제 — 재시도해도 소용없다
+    status('error', /gist|scope|not accessible|permission/i.test(msg) ? '토큰에 gist 권한이 없습니다 — 다시 연결' : `접근 거부 (403): ${msg.slice(0, 60)}`);
   }
 
   async function resolveConflict(remote) {
@@ -2161,14 +2187,22 @@ const gist = (function () {
     pull,
     refresh() { status(linked() ? (meta.syncedAt ? 'synced' : 'syncing') : 'off'); },
     /** 데이터가 바뀔 때마다 호출 — 디바운스해서 한 번만 올린다 */
-    schedule() {
+    /**
+     * kind: 'content'(카드·덱·묶음·즐겨찾기) 는 2.5초 뒤, 'progress'(라운드 진행) 는 45초 간격으로 묶어서 올린다.
+     * 공부 중엔 카드를 넘길 때마다 진행이 저장되는데, 이를 매번 올리면 GitHub 의 쓰기 한도(시간당 500회)에 걸린다.
+     */
+    schedule(kind = 'content') {
       if (!linked() || pendingConflict) return;
       localStorage.setItem(GIST_DIRTY_KEY, '1');
+      const delay = kind === 'progress' ? 45000 : 2500;
+      if (timer && timerDue - Date.now() <= delay) return;   // 더 빠른 예약이 이미 있으면 그걸 탄다
       clearTimeout(timer);
-      timer = setTimeout(() => push(), 2500);
+      timerDue = Date.now() + delay;
+      timer = setTimeout(() => { timer = null; push(); }, delay);
     },
     get dirty() { return localStorage.getItem(GIST_DIRTY_KEY) === '1'; },
     unlink() {
+      clearTimeout(retryTimer); retryTimer = null;
       localStorage.removeItem(GIST_TOKEN_KEY);
       localStorage.removeItem(GIST_META_KEY);
       localStorage.removeItem(GIST_DIRTY_KEY);
@@ -2376,7 +2410,7 @@ function saveProgress() {
   }));
   stampSave();
   fsaSync();
-  gist.schedule();
+  gist.schedule('progress');
 }
 function loadProgress() {
   const s = safeParse(localStorage.getItem(progKey(activeDeckId)), null);
