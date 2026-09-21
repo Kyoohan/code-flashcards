@@ -117,6 +117,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }   /* 클래스의 display 가 hidden 속성을 무력화하지 않도록 */
 html, body { height: 100%; }
 body {
   margin: 0;
@@ -2898,6 +2899,8 @@ function finishBlankCard(hadWrong) {
   $('inline-hint').textContent = '';
   if (hadWrong) feedback('warn', '일부 오답', '틀린 빈칸만 다음 라운드에 다시 나옵니다.');
   else feedback('good', '전부 정답', isRetryMode ? '오답 기록이 있었지만 이번엔 모두 맞혔습니다.' : '완벽합니다.');
+  // 틀린 칸이 있을 때만 '인정' 제공 — 채점기가 틀렸다고 판단되면 카드 전체를 정답 처리할 수 있다
+  $('fb-accept').hidden = !hadWrong;
   toNext();
   updateMeter();
   saveProgress();
@@ -2915,6 +2918,26 @@ function acceptFullCorrect(ta) {
 }
 
 /** 전체 코드 모드의 오답 판정을 뒤집어 정답 처리 */
+/** 빈칸 카드가 '일부 오답'으로 끝난 뒤 인정 → 틀렸던 칸 전부 정답 처리, 바로 다음 문제 */
+function acceptBlankCard() {
+  if (!bs.wrong.size) return;
+  bs.wrong.forEach(() => recordOverride(currentCardId));
+  bs.inputs.forEach(inp => {
+    const idx = Number(inp.dataset.i);
+    if (bs.wrong.has(idx)) { inp.classList.remove('ng', 'revealed'); inp.classList.add('ok'); }
+  });
+  bs.wrong.clear();
+  bs.revealed.clear();
+  nextRoundMap.delete(currentCardId);
+  isRetryMode = false;
+  $('badge-retry').hidden = true;
+  $('fb-accept').hidden = true;
+  updateMeter();
+  saveProgress();
+  toast('정답으로 처리했습니다', 'good');
+  advance();
+}
+
 function acceptFull() {
   if (!fullAttempt) return;
   fullAttempt = null;
@@ -3113,7 +3136,10 @@ $('btn-check').addEventListener('click', () => {
 });
 $('btn-next').addEventListener('click', advance);
 $('btn-giveup').addEventListener('click', giveUp);
-$('fb-accept').addEventListener('click', acceptFull);
+$('fb-accept').addEventListener('click', () => {
+  const card = cardMap.get(currentCardId);
+  if (card && hasBlanks(card)) acceptBlankCard(); else acceptFull();
+});
 
 $('answer-input').addEventListener('keydown', e => {
   if (e.key === 'Tab') {
