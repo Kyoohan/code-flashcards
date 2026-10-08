@@ -430,7 +430,7 @@ textarea.code-surface::placeholder { color: #5a6070; }
 .blank-input.revealed { background: var(--bi-rv-bg); border-bottom-color: var(--bi-rv-line); color: var(--bi-rv-ink); pointer-events: none; }
 .blank-input.frozen { background: var(--bi-fz-bg); border-bottom-color: var(--bi-fz-line); color: var(--bi-fz-ink); pointer-events: none; }
 /* 마크다운 본문(테마 배경) 안의 빈칸 — 어두운 코드 블록 안에서는 기본값으로 되돌린다 */
-.md-body .blank-input {
+.md-body .blank-input, .nbv-out .blank-input {
   --bi-bg: var(--accent-soft); --bi-line: var(--accent); --bi-ink: var(--ink-1);
   --bi-bgf: var(--accent-soft); --bi-linef: var(--accent-ink);
   --bi-ok-bg: var(--good-soft); --bi-ok-line: var(--good); --bi-ok-ink: var(--good);
@@ -439,6 +439,9 @@ textarea.code-surface::placeholder { color: #5a6070; }
   --bi-fz-bg: var(--sunken);    --bi-fz-line: var(--good); --bi-fz-ink: var(--ink-2);
   font-family: 'IBM Plex Sans KR', system-ui, sans-serif; font-size: 14px;
 }
+.nbv-out .blank-input { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px; }
+.nbv-out .md-body .blank-input { font-family: 'IBM Plex Sans KR', system-ui, sans-serif; font-size: 14px; }
+.nbv-html td .blank-input, .nbv-html th .blank-input { width: 72px; margin: 0 2px; text-align: left; }
 .md-body pre .blank-input {
   --bi-bg: rgba(255,255,255,.08);   --bi-line: #8b85ff; --bi-ink: #a5f3fc;
   --bi-bgf: rgba(139,133,255,.2);   --bi-linef: #b9b5ff;
@@ -529,7 +532,42 @@ textarea.code-surface::placeholder { color: #5a6070; }
 .nbe-guide .kbd { background: var(--sunken); }
 .nbe-cells { display: flex; flex-direction: column; gap: 10px; }
 .nbe-cell { border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 12px 12px; background: var(--raise); }
-.nbe-head { font: 600 10.5px/1 'JetBrains Mono', ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-4); margin-bottom: 8px; }
+.nbe-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.nbe-label { font: 600 10.5px/1 'JetBrains Mono', ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-4); }
+.nbe-tools { display: inline-flex; gap: 4px; }
+.nbe-btn {
+  padding: 3px 9px; border-radius: 7px; border: 1px solid var(--line); background: var(--raise);
+  font-size: 11.5px; font-weight: 600; color: var(--ink-2); transition: background .15s, color .15s;
+}
+.nbe-btn:hover { background: var(--accent-soft); color: var(--accent-ink); }
+.nbe-btn[data-act="del-cell"]:hover, .nbe-btn[data-act="del-out"]:hover { background: var(--bad-soft); color: var(--bad); }
+.nbe-insert { display: flex; justify-content: center; gap: 6px; height: 14px; align-items: center; opacity: 0; transition: opacity .15s; }
+.nbe-insert:hover, .nbe-insert:focus-within { opacity: 1; height: 26px; }
+.nbv-edit:hover .nbe-insert { opacity: .45; }
+.nbv-edit .nbe-insert:hover { opacity: 1; }
+.nbe-src { min-height: 1.8em; }
+.nbe-ta {
+  display: block; width: 100%; min-height: 84px; padding: 12px 14px; resize: vertical; outline: none;
+  border: 1px solid var(--line-strong); border-radius: var(--r-sm); background: var(--sunken); color: var(--ink-1);
+  font: 13px/1.7 'IBM Plex Sans KR', system-ui, sans-serif; white-space: pre; overflow: auto; tab-size: 4;
+}
+.nbe-ta.code-surface { font: 12.5px/1.7 'JetBrains Mono', ui-monospace, monospace; background: var(--code-bg); color: var(--code-ink); }
+.nbe-ta:focus { border-color: var(--accent); }
+.nbe-pbtn {
+  display: inline-block; vertical-align: baseline; margin: 0 0 0 7px; padding: 0 7px; height: 1.55em;
+  border: 1px solid rgba(139,133,255,.55); border-radius: 6px; background: rgba(139,133,255,.18);
+  color: #cfccff; font: 600 10.5px/1.5 'IBM Plex Sans KR', system-ui, sans-serif; cursor: pointer;
+  user-select: none; -webkit-user-select: none; transition: background .15s, transform .15s;
+}
+.nbe-pbtn::before { content: '＋ 빈칸'; }          /* 글자를 CSS 로 그려서 소스 텍스트(오프셋)에 포함되지 않는다 */
+.nbe-pbtn:hover { background: rgba(139,133,255,.42); transform: translateY(-1px); }
+.print-btn { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 500; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nbe-outrow { margin-top: 6px; }
+.nbe-outtools { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 4px; }
+.nbe-outlabel { font-size: 10.5px; font-weight: 600; letter-spacing: .04em; color: var(--ink-4); text-transform: uppercase; }
+.nbe-outtools .nbe-btn:not(:last-child) { margin-right: 4px; }
+.nbe-outrow .nbv-pre.nbe-src, .nbe-outrow .nbv-html.nbe-src { cursor: text; user-select: text; -webkit-user-select: text; }
+.nbe-outrow .nbe-mark { color: inherit; }
 .nbe-src { cursor: text; user-select: text; -webkit-user-select: text; }
 .nbe-mdsrc { white-space: pre-wrap; word-break: break-word; font: 13.5px/1.75 'IBM Plex Sans KR', system-ui, sans-serif; color: var(--ink-1); }
 .nbe-codesrc { margin: 0; padding: 12px 14px; overflow-x: auto; white-space: pre; line-height: 1.8; font-size: 12.5px; }
@@ -1126,6 +1164,10 @@ pre.answer-code {
           </div>
           <div class="hint" style="margin-top:8px" id="blank-hint">빈칸 없음 — 전체 코드를 타이핑하는 문제로 출제됩니다</div>
         </div>
+        <div id="print-wrap" hidden>
+          <label class="field-label">print 문 — 안의 내용을 빈칸으로</label>
+          <div class="blank-chips" id="print-btns"></div>
+        </div>
         <div id="blank-chip-wrap" hidden>
           <label class="field-label">빈칸 <span id="blank-count"></span></label>
           <div class="blank-chips" id="blank-chips"></div>
@@ -1322,7 +1364,7 @@ pre.answer-code {
 
 <div id="toasts" data-liquid-ignore></div>
 
-<script src="nbview.js?v=1"></script>
+<script src="nbview.js?v=2"></script>
 <script>
 'use strict';
 
@@ -1466,7 +1508,10 @@ function sanitizeBlanks(list, term) {
 const isNb = card => !!card && card.kind === 'notebook';
 function nbFlat(card) {
   const out = [];
-  (card.cells || []).forEach((cell, ci) => (cell.blanks || []).forEach((b, bi) => out.push({ ci, bi, b })));
+  (card.cells || []).forEach((cell, ci) => {
+    (cell.blanks || []).forEach((b, bi) => out.push({ ci, bi, b }));
+    (cell.outputs || []).forEach(o => (o.blanks || []).forEach(b => out.push({ ci, bi: -1, b })));   // 출력의 빈칸은 소스 빈칸 뒤에 이어 번호를 붙인다
+  });
   return out;
 }
 const allBlanks = card => isNb(card) ? nbFlat(card).map(x => x.b) : (card.blanks || []);
@@ -3656,6 +3701,7 @@ function openEditor() {
 let editorOpenSnapshot = null;
 function closeEditor() {
   flushAutoSave();
+  nbEditing = null;
   // 설명이나 코드 한쪽만 적힌 새 카드는 저장되지 않은 채 사라지므로 알려준다
   if (editIndex === -1) {
     const def = $('edit-def').value.trim(), term = termEl.value.trim();
@@ -3736,9 +3782,33 @@ $('btn-new-card').addEventListener('click', () => {
 });
 
 /** 미러(하이라이트 오버레이) + 빈칸 칩 + 미리보기 갱신 */
+/** 코드 안의 print(...) 마다 '안의 내용을 빈칸으로' 버튼 한 개씩 */
+function renderPrintButtons(text) {
+  const wrap = $('print-wrap'), box = $('print-btns');
+  box.innerHTML = '';
+  const prints = nbvOpenPrints(text, editBlanks, 'python');
+  wrap.hidden = !prints.length;
+  prints.forEach(p => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'chip-btn print-btn';
+    const inner = text.slice(p.start, p.end).replace(/\s+/g, ' ');
+    b.title = 'print 안의 내용을 빈칸으로';
+    b.textContent = `print(${inner.length > 26 ? inner.slice(0, 26) + '…' : inner})`;
+    b.addEventListener('click', () => {
+      editBlanks = sanitizeBlanks([...editBlanks, { start: p.start, end: p.end }], termEl.value);
+      refreshTermView();
+      autoSave(true);
+      toast('print 안의 내용을 빈칸으로 지정했습니다', 'good');
+    });
+    box.appendChild(b);
+  });
+}
+
 function refreshTermView() {
   const text = termEl.value;
   editBlanks = sanitizeBlanks(editBlanks, text);
+  renderPrintButtons(text);
 
   // 미러: 원문 + 빈칸 범위 mark + 드래그 중인 선택 범위 표시
   const marks = editBlanks.map(b => ({ ...b, cls: '' }));
@@ -3930,16 +4000,47 @@ termEl.addEventListener('keydown', e => {
 });
 
 /* ============================================================
-   노트북 카드 편집 — 셀을 노트북처럼 보여 주고, 드래그한 범위를 빈칸으로
+   노트북 카드 편집 — 셀을 노트북처럼 보여 주고, 드래그한 범위를 빈칸으로.
+   셀·출력의 내용 수정, 셀 추가·삭제·이동도 여기서 한다.
    ============================================================ */
 let editKind = 'plain';      // 'plain' | 'nb' — 지금 열린 편집 패널
-let editCells = [];          // 노트북 카드의 셀 사본 (빈칸만 바뀐다)
+let editCells = [];          // 노트북 카드의 셀 사본 (저장 전까지 여기서만 바뀐다)
 let editLang = 'python';
-let nbSel = null;            // 드래그로 잡힌 범위 { ci, start, end }
+let nbSel = null;            // 드래그로 잡힌 범위 { ci, oi(null=셀 소스), start, end }
+let nbEditing = null;        // 지금 textarea 로 고치는 대상 { ci, oi }
 const nbeChip = $('nbe-chip');
+
+function cloneCells(cells) {
+  return cells.map(c => {
+    const o = { ...c, blanks: (c.blanks || []).map(b => ({ ...b })) };
+    if (c.outputs) o.outputs = c.outputs.map(x => x.blanks ? { ...x, blanks: x.blanks.map(b => ({ ...b })) } : { ...x });
+    return o;
+  });
+}
+
+/** 셀 소스(oi == null) 또는 출력 하나의 빈칸 대상 */
+function nbeTarget(ci, oi) {
+  const cell = editCells[ci];
+  if (!cell) return null;
+  if (oi == null) return { text: cell.source, getB: () => cell.blanks || [], setB: v => { cell.blanks = v; } };
+  const o = (cell.outputs || [])[oi];
+  const text = o && nbvOutText(o);
+  if (text == null) return null;
+  return { text, getB: () => o.blanks || [], setB: v => { if (v.length) o.blanks = v; else delete o.blanks; } };
+}
+/** 내용을 직접 고칠 수 있는 필드 */
+function nbeField(ci, oi) {
+  const cell = editCells[ci];
+  if (!cell) return null;
+  if (oi == null) return { obj: cell, key: 'source' };
+  const o = (cell.outputs || [])[oi];
+  return o && nbvOutEditable(o) ? { obj: o, key: 'text' } : null;
+}
+const nbeSrcSel = (ci, oi) => oi == null ? `.nbe-src[data-ci="${ci}"]:not([data-oi])` : `.nbe-src[data-ci="${ci}"][data-oi="${oi}"]`;
 
 function showEditPane(kind) {
   editKind = kind;
+  nbEditing = null;
   $('plain-pane').hidden = kind === 'nb';
   $('nbe-pane').hidden = kind !== 'nb';
   setNbSel(null);
@@ -3948,13 +4049,21 @@ function showEditPane(kind) {
 function loadNbCard(card) {
   showEditPane('nb');
   editLang = card.lang || 'python';
-  editCells = (card.cells || []).map(c => ({ ...c, blanks: (c.blanks || []).map(b => ({ ...b })) }));
+  editCells = cloneCells(card.cells || []);
   $('nbe-title').value = card.definition;
+  renderNbeAll();
+  $('nbe-pane').scrollTop = 0;
+}
+
+/** 셀 전체를 다시 그린다 (구조가 바뀌었을 때). 스크롤 위치는 유지한다 */
+function renderNbeAll() {
+  const pane = $('nbe-pane');
+  const top = pane.scrollTop;
   const host = $('nbe-cells');
   host.innerHTML = '';
   host.appendChild(nbvBuildView({ cells: editCells, lang: editLang }, { mode: 'edit' }));
   editCells.forEach((_, ci) => renderNbeChips(ci));
-  $('nbe-pane').scrollTop = 0;
+  pane.scrollTop = top;
 }
 
 /** 셀 하나만 다시 그린다 (빈칸을 바꿀 때마다 전체를 다시 그리지 않도록) */
@@ -3965,17 +4074,24 @@ function renderNbeCell(ci) {
   renderNbeChips(ci);
 }
 
+/** 셀 소스와 각 출력의 빈칸 칩 */
 function renderNbeChips(ci) {
-  const box = $('nbe-cells').querySelector(`.nbe-chips[data-ci="${ci}"]`);
-  if (!box) return;
-  box.innerHTML = '';
   const cell = editCells[ci];
-  cell.blanks.forEach((b, i) => {
+  if (!cell) return;
+  const host = $('nbe-cells');
+  fillNbeChips(host.querySelector(`.nbe-chips[data-ci="${ci}"]:not([data-oi])`), ci, null);
+  (cell.outputs || []).forEach((_, oi) => fillNbeChips(host.querySelector(`.nbe-chips[data-ci="${ci}"][data-oi="${oi}"]`), ci, oi));
+}
+function fillNbeChips(box, ci, oi) {
+  const tg = nbeTarget(ci, oi);
+  if (!box || !tg) return;
+  box.innerHTML = '';
+  tg.getB().forEach((b, i) => {
     const chip = document.createElement('span');
     chip.className = 'blank-chip';
     const t = document.createElement('span');
     t.className = 't';
-    t.textContent = cell.source.slice(b.start, b.end).replace(/\s*\n\s*/g, ' ⏎ ');
+    t.textContent = tg.text.slice(b.start, b.end).replace(/\s*\n\s*/g, ' ⏎ ');
     const star = document.createElement('button');
     star.type = 'button';
     star.className = 'star' + (b.fav ? ' on' : '');
@@ -3983,7 +4099,7 @@ function renderNbeChips(ci) {
     star.innerHTML = `<svg viewBox="0 0 24 24" fill="${b.fav ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="${STAR_PATH}"/></svg>`;
     star.addEventListener('click', ev => {
       ev.stopPropagation();
-      const cur = editCells[ci].blanks[i];
+      const cur = nbeTarget(ci, oi).getB()[i];
       if (!cur) return;
       if (cur.fav) delete cur.fav; else cur.fav = true;
       renderNbeCell(ci);
@@ -3995,21 +4111,25 @@ function renderNbeChips(ci) {
     x.title = '이 빈칸 해제';
     x.addEventListener('click', ev => {
       ev.stopPropagation();
-      editCells[ci].blanks.splice(i, 1);
+      const cur = nbeTarget(ci, oi);
+      const list = cur.getB().slice();
+      list.splice(i, 1);
+      cur.setB(list);
       renderNbeCell(ci);
       autoSave(true);
     });
     chip.append(t, star, x);
     chip.addEventListener('click', () => {
-      const src = $('nbe-cells').querySelector(`.nbe-src[data-ci="${ci}"]`);
-      const cur = editCells[ci].blanks[i];
-      if (src && cur && nbvSelectRange(src, cur.start, cur.end)) src.scrollIntoView({ block: 'nearest' });
+      const src = $('nbe-cells').querySelector(nbeSrcSel(ci, oi));
+      const cur = nbeTarget(ci, oi);
+      const bb = cur && cur.getB()[i];
+      if (src && bb && nbvSelectRange(src, bb.start, bb.end)) src.scrollIntoView({ block: 'nearest' });
     });
     box.appendChild(chip);
   });
 }
 
-/** 선택 범위를 상태로 두고 떠 있는 버튼을 위치시킨다 */
+/* ── 드래그 선택 → 빈칸 ─────────────────────────────────── */
 function setNbSel(sel) {
   nbSel = sel;
   if (!sel || $('editor-modal').hidden) { nbeChip.hidden = true; return; }
@@ -4033,25 +4153,28 @@ document.addEventListener('selectionchange', () => {
   if (!sel || !sel.rangeCount || sel.isCollapsed) { setNbSel(null); return; }
   const r = sel.getRangeAt(0);
   const a = nbvSrcOf(r.startContainer), b = nbvSrcOf(r.endContainer);
-  if ((a && b && a !== b) || (!a && !b)) { setNbSel(null); return; }      // 셀 두 개에 걸치거나 셀 밖
+  if ((a && b && a !== b) || (!a && !b)) { setNbSel(null); return; }      // 셀·출력 두 군데에 걸치거나 밖
   const src = a || b;
   const ci = Number(src.dataset.ci);
-  const text = editCells[ci] ? editCells[ci].source : '';
+  const oi = src.dataset.oi === undefined ? null : Number(src.dataset.oi);
+  const tg = nbeTarget(ci, oi);
+  if (!tg) { setNbSel(null); return; }
+  const text = tg.text;
   let start = a ? nbvOffsetIn(src, r.startContainer, r.startOffset) : 0;
-  let end = b ? nbvOffsetIn(src, r.endContainer, r.endOffset) : text.length;   // 셀 끝을 넘어 잡힌 경우(세 번 클릭 등)는 끝으로 맞춘다
+  let end = b ? nbvOffsetIn(src, r.endContainer, r.endOffset) : text.length;   // 끝을 넘어 잡힌 경우(세 번 클릭 등)는 끝으로 맞춘다
   while (start < end && /\s/.test(text[start])) start++;
   while (end > start && /\s/.test(text[end - 1])) end--;
   if (end <= start) { setNbSel(null); return; }
-  setNbSel({ ci, start, end });
+  setNbSel({ ci, oi, start, end });
 });
 $('nbe-pane').addEventListener('scroll', () => { if (nbSel) positionNbeChip(); });
 
 function makeNbBlank() {
   if (!nbSel) return;
-  const { ci, start, end } = nbSel;
-  const cell = editCells[ci];
-  if (!cell) return;
-  cell.blanks = sanitizeBlanks([...cell.blanks, { start, end }], cell.source);
+  const { ci, oi, start, end } = nbSel;
+  const tg = nbeTarget(ci, oi);
+  if (!tg) return;
+  tg.setB(sanitizeBlanks([...tg.getB(), { start, end }], tg.text));
   window.getSelection().removeAllRanges();
   setNbSel(null);
   renderNbeCell(ci);
@@ -4065,14 +4188,138 @@ document.addEventListener('keydown', e => {
 });
 $('nbe-title').addEventListener('input', () => autoSave());
 
+/* ── 내용 수정: 셀·출력 텍스트를 textarea 로 고친다 ───────────── */
+function stopNbEdit(render = true) {
+  if (!nbEditing) return;
+  const { ci } = nbEditing;
+  nbEditing = null;
+  if (render) renderNbeCell(ci);
+}
+
+function startNbEdit(ci, oi) {
+  if (nbEditing) {
+    const same = nbEditing.ci === ci && nbEditing.oi === oi;
+    stopNbEdit();
+    if (same) return;                       // 같은 버튼을 다시 누르면 '완료'
+  }
+  const fld = nbeField(ci, oi);
+  const holder = $('nbe-cells').querySelector(nbeSrcSel(ci, oi));
+  if (!fld || !holder) return;
+  setNbSel(null);
+  window.getSelection().removeAllRanges();
+
+  // holder 를 교체하면 부모를 찾을 수 없으므로 '수정/완료' 버튼은 미리 찾아 둔다
+  const outRow = holder.closest('.nbe-outrow');
+  const btn = outRow ? outRow.querySelector('[data-act="edit-out"]') : holder.closest('.nbe-cell').querySelector('[data-act="edit-cell"]');
+  const isCode = oi == null && editCells[ci].type === 'code';
+  const ta = document.createElement('textarea');
+  ta.className = 'nbe-ta' + (isCode || oi != null ? ' code-surface' : '');
+  ta.spellcheck = false;
+  ta.value = fld.obj[fld.key];
+  holder.replaceWith(ta);
+  nbEditing = { ci, oi };
+
+  const fit = () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight + 2, 560) + 'px'; };
+  fit();
+  ta.addEventListener('input', () => {
+    const old = fld.obj[fld.key], next = ta.value;
+    // 이미 뚫어 둔 빈칸이 글자 수정을 따라가도록 위치를 보정한다
+    const bl = remapBlanks(fld.obj.blanks || [], old, next);
+    if (bl.length || oi == null) fld.obj.blanks = bl; else delete fld.obj.blanks;
+    fld.obj[fld.key] = next;
+    fit();
+    autoSave();
+  });
+  ta.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); stopNbEdit(); return; }   // 편집 창 전체가 닫히지 않게
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const st = ta.selectionStart, old = ta.value;
+      ta.value = old.slice(0, st) + '    ' + old.slice(ta.selectionEnd);
+      ta.selectionStart = ta.selectionEnd = st + 4;
+      ta.dispatchEvent(new Event('input'));
+    }
+  });
+  if (btn) btn.textContent = '완료';
+  ta.focus();
+}
+
+/* ── 셀 구조: 추가 · 삭제 · 이동 ──────────────────────────── */
+function nbeStructure(fn) {
+  stopNbEdit(false);
+  setNbSel(null);
+  fn();
+  renderNbeAll();
+  autoSave(true);
+}
+function addCellAfter(after, type) {
+  const at = after + 1;
+  nbeStructure(() => {
+    editCells.splice(at, 0, type === 'code'
+      ? { type: 'code', source: '', blanks: [], exec: null, outputs: [] }
+      : { type: 'markdown', source: '', blanks: [] });
+  });
+  startNbEdit(at, null);                   // 바로 내용을 쓸 수 있게
+  const el = $('nbe-cells').querySelector(`.nbe-cell[data-ci="${at}"]`);
+  if (el) el.scrollIntoView({ block: 'nearest' });
+}
+async function deleteCell(ci) {
+  const c = editCells[ci];
+  if (!c) return;
+  const hasContent = (c.source || '').trim() || nbvCellBlankCount(c) || (c.outputs || []).length;
+  if (hasContent && !await confirmBox('셀 삭제', '이 셀의 내용과 빈칸이 삭제됩니다.', '삭제')) return;
+  nbeStructure(() => editCells.splice(ci, 1));
+}
+function moveCell(ci, dir) {
+  const to = ci + dir;
+  if (to < 0 || to >= editCells.length) return;
+  nbeStructure(() => { const [c] = editCells.splice(ci, 1); editCells.splice(to, 0, c); });
+  const el = $('nbe-cells').querySelector(`.nbe-cell[data-ci="${to}"]`);
+  if (el) el.scrollIntoView({ block: 'nearest' });
+}
+async function deleteOutput(ci, oi) {
+  const o = (editCells[ci] && editCells[ci].outputs || [])[oi];
+  if (!o) return;
+  if ((o.blanks || []).length && !await confirmBox('출력 삭제', '이 출력에 뚫어 둔 빈칸도 함께 삭제됩니다.', '삭제')) return;
+  nbeStructure(() => editCells[ci].outputs.splice(oi, 1));
+}
+
+$('nbe-cells').addEventListener('click', async e => {
+  const btn = e.target.closest('[data-act]');
+  if (!btn) return;
+  const act = btn.dataset.act;
+  const cellEl = btn.closest('.nbe-cell');
+  const ci = cellEl ? Number(cellEl.dataset.ci) : null;
+  const outEl = btn.closest('.nbe-outrow');
+  const oi = outEl ? Number(outEl.dataset.oi) : null;
+  if (act === 'print-blank') {
+    const tg = nbeTarget(ci, null);
+    if (!tg) return;
+    tg.setB(sanitizeBlanks([...tg.getB(), { start: Number(btn.dataset.s), end: Number(btn.dataset.e) }], tg.text));
+    renderNbeCell(ci);
+    autoSave(true);
+    toast('print 안의 내용을 빈칸으로 지정했습니다', 'good');
+    return;
+  }
+  if (act === 'add-md' || act === 'add-code') addCellAfter(Number(btn.closest('.nbe-insert').dataset.after), act === 'add-code' ? 'code' : 'markdown');
+  else if (act === 'edit-cell') startNbEdit(ci, null);
+  else if (act === 'edit-out') startNbEdit(ci, oi);
+  else if (act === 'up') moveCell(ci, -1);
+  else if (act === 'down') moveCell(ci, 1);
+  else if (act === 'del-cell') await deleteCell(ci);
+  else if (act === 'del-out') await deleteOutput(ci, oi);
+});
+
 function commitNb() {
   const prev = tempCards[editIndex];
   if (!prev || !isNb(prev)) return false;
   const title = $('nbe-title').value.trim();
   if (!title) { editorStatus('제목을 입력하면 저장됩니다'); return false; }
-  const sig = c => JSON.stringify(c.map(x => x.blanks || []));
+  // 글자 수정·셀 구조·출력·빈칸 어느 것이든 달라졌을 때만 저장한다
+  const sig = cs => JSON.stringify(cs.map(c => [c.type, c.source, c.blanks || [],
+    (c.outputs || []).map(o => [o.kind, o.text != null ? o.text : (o.html ? o.html.length : (o.size || 0)), o.blanks || []])]));
   if (prev.definition === title && sig(prev.cells) === sig(editCells)) { editorStatus('저장됨'); return true; }
-  tempCards[editIndex] = { ...prev, definition: title, cells: editCells.map(c => ({ ...c, blanks: c.blanks.map(b => ({ ...b })) })) };
+  tempCards[editIndex] = { ...prev, definition: title, cells: cloneCells(editCells) };
   allCards = tempCards.map(normalizeCard);
   saveCards();
   onCardsChanged();

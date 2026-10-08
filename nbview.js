@@ -116,6 +116,43 @@ function nbvValidOutput(o) {
   if (o.kind === 'image') return !!NBV_IMG_MIME[o.mime] && typeof o.data === 'string' && /^[A-Za-z0-9+/=]+$/.test(o.data);
   return false;
 }
+/* ── 출력의 빈칸 ──────────────────────────────────────────
+   텍스트·오류·마크다운 출력은 o.text, HTML 출력(pandas 표 등)은 정화된 HTML 의 '글자만 이어붙인 텍스트'를
+   기준으로 오프셋을 잡는다. 이미지·SVG 는 글자가 없어 빈칸을 둘 수 없다. */
+const nbvHtmlTextMemo = new Map();
+function nbvHtmlText(html) {
+  let t = nbvHtmlTextMemo.get(html);
+  if (t === undefined) {
+    t = nbvSanitize(html).textContent;
+    if (nbvHtmlTextMemo.size > 200) nbvHtmlTextMemo.clear();
+    nbvHtmlTextMemo.set(html, t);
+  }
+  return t;
+}
+function nbvOutText(o) {
+  if (!o) return null;
+  if (o.kind === 'text' || o.kind === 'error' || o.kind === 'md') return o.text;
+  if (o.kind === 'html') return nbvHtmlText(o.html);
+  return null;
+}
+const nbvOutBlankable = o => nbvOutText(o) != null;
+const nbvOutEditable = o => !!o && (o.kind === 'text' || o.kind === 'error' || o.kind === 'md');
+/** 셀 하나가 가진 빈칸 수 (소스 + 출력) */
+function nbvCellBlankCount(cell) {
+  return (cell.blanks || []).length + (cell.outputs || []).reduce((a, o) => a + (o.blanks || []).length, 0);
+}
+
+function nbvNormalizeOutput(o) {
+  if (!Array.isArray(o.blanks) || !o.blanks.length) {
+    if (!('blanks' in o)) return o;
+    const { blanks, ...rest } = o; return rest;
+  }
+  const text = nbvOutText(o);
+  const bl = text == null ? [] : sanitizeBlanks(o.blanks, text);
+  if (bl.length) return { ...o, blanks: bl };
+  const { blanks, ...rest } = o;
+  return rest;
+}
 function nbvNormalizeCell(c) {
   if (!c || typeof c !== 'object') return null;
   const type = c.type === 'code' ? 'code' : 'markdown';
@@ -123,7 +160,7 @@ function nbvNormalizeCell(c) {
   const cell = { type, source, blanks: sanitizeBlanks(c.blanks, source) };
   if (type === 'code') {
     cell.exec = c.exec == null ? null : c.exec;
-    cell.outputs = (Array.isArray(c.outputs) ? c.outputs : []).filter(nbvValidOutput);
+    cell.outputs = (Array.isArray(c.outputs) ? c.outputs : []).filter(nbvValidOutput).map(nbvNormalizeOutput);
   }
   return cell;
 }
@@ -192,7 +229,7 @@ function nbvCardStats(card) {
   let md = 0, code = 0, outs = 0, blanks = 0;
   (card.cells || []).forEach(c => {
     if (c.type === 'code') { code++; outs += (c.outputs || []).length; } else md++;
-    blanks += (c.blanks || []).length;
+    blanks += nbvCellBlankCount(c);
   });
   return { md, code, outs, blanks, bytes: JSON.stringify(card.cells || []).length };
 }
@@ -357,42 +394,203 @@ function nbvSanitize(html) {
   return frag;
 }
 
+/* ── print(...) 탐지 ────────────────────────────────────────
+   편집기에서 print 문마다 '안쪽 내용을 빈칸으로' 버튼을 띄우기 위한 것. */
+const NBV_SLASH_LANGS = new Set(['javascript', 'typescript', 'java', 'c', 'cpp', 'c++', 'csharp', 'c#', 'go', 'rust', 'kotlin', 'php', 'swift', 'scala', 'dart']);
+/** 문자열·주석 안을 1 로 표시한 마스크. 파이썬 계열에서 // 는 주석이 아니라 나눗셈이므로 언어별로 다르게 본다 */
+function nbvMask(src, lang) {
+  if (NBV_SLASH_LANGS.has(String(lang || '').toLowerCase()) && typeof codeMask === 'function') return codeMask(src);
+  const mask = new Uint8Array(src.length);
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    if (c === '#') { while (i < src.length && src[i] !== '\n') mask[i++] = 1; continue; }
+    if (c === '"' || c === "'") {
+      const triple = src[i + 1] === c && src[i + 2] === c;
+      const qlen = triple ? 3 : 1;
+      let j = i + qlen;
+      while (j < src.length) {
+        if (src[j] === '\\') { j += 2; continue; }
+        if (triple ? (src[j] === c && src[j + 1] === c && src[j + 2] === c) : src[j] === c) { j += qlen; break; }
+        if (!triple && src[j] === '\n') break;
+        j++;
+      }
+      for (let k = i; k < Math.min(j, src.length); k++) mask[k] = 1;
+      i = Math.max(j, i + 1);
+      continue;
+    }
+    i++;
+  }
+  return mask;
+}
+
+/** 소스 안의 print(...) 호출. start/end 는 괄호 안쪽 내용(앞뒤 공백 제외), close 는 ')' 바로 다음 위치.
+ *  문자열·주석 안의 print 는 제외하고, print(print(x)) 처럼 겹친 경우는 바깥 것만 찾는다. */
+function nbvFindPrints(src, lang) {
+  const mask = nbvMask(src, lang);
+  const out = [];
+  const re = /(^|[^\w.])print[ \t]*\(/g;
+  let m;
+  while ((m = re.exec(src)) !== null) {
+    const open = m.index + m[0].length - 1;
+    if (mask[m.index + m[1].length]) continue;
+    let depth = 0, close = -1;
+    for (let i = open; i < src.length; i++) {
+      if (mask[i]) continue;
+      if (src[i] === '(') depth++;
+      else if (src[i] === ')') { depth--; if (depth === 0) { close = i; break; } }
+    }
+    if (close < 0) continue;
+    let st = open + 1, en = close;
+    while (st < en && /\s/.test(src[st])) st++;
+    while (en > st && /\s/.test(src[en - 1])) en--;
+    if (en <= st) continue;
+    out.push({ start: st, end: en, close: close + 1 });
+    re.lastIndex = close + 1;
+  }
+  return out;
+}
+/** 이미 빈칸이 걸쳐 있는 print 는 버튼을 보이지 않는다 */
+const nbvOpenPrints = (src, blanks, lang) =>
+  nbvFindPrints(src, lang).filter(p => !(blanks || []).some(b => b.start < p.end && b.end > p.start));
+
+/** root 안의 텍스트 노드를 이어붙인 글자 기준으로 blanks[k] 범위를 make(k, 답) 이 돌려주는 노드로 바꾼다.
+ *  표 셀처럼 여러 텍스트 노드에 걸쳐도 처리한다. */
+function nbvReplaceRanges(root, blanks, make) {
+  const nodes = [];
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let pos = 0, n;
+  while ((n = w.nextNode())) { nodes.push({ n, s: pos, e: pos + n.nodeValue.length }); pos += n.nodeValue.length; }
+  // 노드를 바꾸기 전에 모든 빈칸의 정보를 원본 기준으로 계산해 둔다
+  const plan = blanks.map((b, k) => {
+    const hit = nodes.filter(x => x.e > b.start && x.s < b.end);
+    if (!hit.length) return null;
+    const first = hit[0], last = hit[hit.length - 1];
+    return {
+      k, hit, first, last,
+      answer: hit.map(x => x.n.nodeValue.slice(Math.max(b.start, x.s) - x.s, Math.min(b.end, x.e) - x.s)).join(''),
+      before: first.n.nodeValue.slice(0, b.start - first.s),
+      after: last.n.nodeValue.slice(b.end - last.s),
+    };
+  });
+  // 뒤쪽 빈칸부터 처리해야 앞쪽 빈칸의 위치가 밀리지 않는다. 노드는 교체하지 않고 제자리에서 줄인다.
+  for (let i = plan.length - 1; i >= 0; i--) {
+    const p = plan[i];
+    if (!p) continue;
+    const rep = make(p.k, p.answer);
+    if (p.first === p.last) {
+      p.first.n.nodeValue = p.before;
+      const after = document.createTextNode(p.after);
+      p.first.n.after(rep, after);
+    } else {
+      p.first.n.nodeValue = p.before;
+      p.first.n.after(rep);
+      p.hit.slice(1, -1).forEach(x => { x.n.nodeValue = ''; });
+      p.last.n.nodeValue = p.after;
+    }
+  }
+}
+const nbvHtmlNode = html => { const t = document.createElement('template'); t.innerHTML = html; return t.content; };
+function nbvMarkEl(k, ans) {
+  const m = document.createElement('mark');
+  m.className = 'nbe-mark';
+  m.dataset.b = k;
+  m.textContent = ans;
+  return m;
+}
+function nbvBtn(act, label, title) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'nbe-btn';
+  b.dataset.act = act;
+  b.textContent = label;
+  if (title) b.title = title;
+  return b;
+}
+
 /* ────────────────────────────────────────────────────────────
    5. 출력 렌더링
    ──────────────────────────────────────────────────────────── */
-function nbvOutputsEl(outputs) {
+/** 출력 하나. ctx 가 있으면 빈칸을 입력창(study) 또는 표시(edit)로 그린다. base 는 이 출력의 첫 빈칸 번호 */
+function nbvOutputRowEl(o, ctx, base, ci, oi) {
+  const edit = !!ctx && ctx.mode === 'edit';
+  const make = ctx && ctx.makeTag;
+  const blanks = o.blanks || [];
+  const tag = (k, ans) => make(base + k, ans);
+  const row = document.createElement('div');
+  row.className = 'nbv-out nbv-out-' + o.kind + (o.name === 'stderr' ? ' is-err' : '');
+  const mark = el => { el.classList.add('nbe-src'); el.dataset.ci = ci; el.dataset.oi = oi; };
+
+  if (o.kind === 'text' || o.kind === 'error') {
+    const pre = document.createElement('pre');
+    pre.className = 'nbv-pre';
+    if (edit) { mark(pre); pre.innerHTML = nbvRawWithMarks({ source: o.text, blanks }) || ' '; }
+    else if (blanks.length && make) pre.innerHTML = nbvFill(nbvEsc(nbvTokenized({ source: o.text, blanks }, base)), { source: o.text, blanks }, base, tag);
+    else pre.textContent = o.text;
+    row.appendChild(pre);
+  } else if (o.kind === 'html') {
+    const box = document.createElement('div');
+    box.className = 'nbv-html';
+    box.appendChild(nbvSanitize(o.html));
+    if (edit) { mark(box); if (blanks.length) nbvReplaceRanges(box, blanks, nbvMarkEl); }
+    else if (blanks.length && make) nbvReplaceRanges(box, blanks, (k, ans) => nbvHtmlNode(tag(k, ans)));
+    row.appendChild(box);
+  } else if (o.kind === 'md') {
+    const box = document.createElement('div');
+    if (edit) { box.className = 'nbe-mdsrc'; mark(box); box.innerHTML = nbvRawWithMarks({ source: o.text, blanks }) || ' '; }
+    else {
+      box.className = 'md-body';
+      box.innerHTML = blanks.length && make
+        ? nbvFill(nbvMd(nbvTokenized({ source: o.text, blanks }, base)), { source: o.text, blanks }, base, tag)
+        : nbvMd(o.text);
+    }
+    row.appendChild(box);
+  } else if (o.kind === 'image' || o.kind === 'svg') {
+    const img = document.createElement('img');
+    img.className = 'nbv-img';
+    img.alt = '출력 이미지';
+    img.loading = 'lazy';
+    // SVG 는 <img> 로만 그린다 — 이 경로에서는 안의 스크립트가 실행되지 않는다
+    img.src = o.kind === 'image'
+      ? `data:${o.mime};base64,${o.data}`
+      : 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(o.text)));
+    row.appendChild(img);
+  }
+  return row;
+}
+
+function nbvOutputsEl(outputs, ctx, base, ci) {
+  const edit = !!ctx && ctx.mode === 'edit';
   const wrap = document.createElement('div');
   wrap.className = 'nbv-outs';
-  outputs.forEach(o => {
-    const row = document.createElement('div');
-    row.className = 'nbv-out nbv-out-' + o.kind + (o.name === 'stderr' ? ' is-err' : '');
-    if (o.kind === 'text' || o.kind === 'error') {
-      const pre = document.createElement('pre');
-      pre.className = 'nbv-pre';
-      pre.textContent = o.text;
-      row.appendChild(pre);
-    } else if (o.kind === 'html') {
+  let b = base || 0;
+  outputs.forEach((o, oi) => {
+    const row = nbvOutputRowEl(o, ctx, b, ci, oi);
+    if (edit) {
+      // 편집용: 출력마다 수정·삭제 버튼과 빈칸 칩 자리를 붙인다
       const box = document.createElement('div');
-      box.className = 'nbv-html';
-      box.appendChild(nbvSanitize(o.html));
-      row.appendChild(box);
-    } else if (o.kind === 'md') {
-      const box = document.createElement('div');
-      box.className = 'md-body';
-      box.innerHTML = nbvMd(o.text);
-      row.appendChild(box);
-    } else if (o.kind === 'image' || o.kind === 'svg') {
-      const img = document.createElement('img');
-      img.className = 'nbv-img';
-      img.alt = '출력 이미지';
-      img.loading = 'lazy';
-      // SVG 는 <img> 로만 그린다 — 이 경로에서는 안의 스크립트가 실행되지 않는다
-      img.src = o.kind === 'image'
-        ? `data:${o.mime};base64,${o.data}`
-        : 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(o.text)));
-      row.appendChild(img);
+      box.className = 'nbe-outrow';
+      box.dataset.ci = ci;
+      box.dataset.oi = oi;
+      const tools = document.createElement('div');
+      tools.className = 'nbe-outtools';
+      const label = document.createElement('span');
+      label.className = 'nbe-outlabel';
+      label.textContent = { text: o.name === 'stderr' ? '출력(stderr)' : '출력', error: '오류', html: '표/HTML', md: '마크다운 출력', image: '이미지', svg: 'SVG' }[o.kind] || '출력';
+      tools.appendChild(label);
+      if (nbvOutEditable(o)) tools.appendChild(nbvBtn('edit-out', '수정'));
+      tools.appendChild(nbvBtn('del-out', '삭제'));
+      const chips = document.createElement('div');
+      chips.className = 'nbe-chips';
+      chips.dataset.ci = ci;
+      chips.dataset.oi = oi;
+      box.append(tools, row);
+      if (nbvOutBlankable(o)) box.appendChild(chips);
+      wrap.appendChild(box);
+    } else {
+      wrap.appendChild(row);
     }
-    wrap.appendChild(row);
+    b += (o.blanks || []).length;
   });
   return wrap;
 }
@@ -415,6 +613,17 @@ function nbvFill(html, cell, base, make) {
   (cell.blanks || []).forEach((b, k) => { html = html.split(nbvToken(base + k)).join(make(k, cell.source.slice(b.start, b.end))); });
   return html;
 }
+/** 편집용: 빈칸 토큰에 더해, print 호출 바로 뒤에 버튼 자리(토큰)를 끼워 넣는다 */
+function nbvTokenizedEdit(cell, base, marks) {
+  const ev = [];
+  (cell.blanks || []).forEach((b, k) => ev.push({ pos: b.start, end: b.end, tok: nbvToken(base + k) }));
+  marks.forEach(m => ev.push({ pos: m.pos, end: m.pos, tok: m.tok }));
+  ev.sort((a, b) => a.pos - b.pos || a.end - b.end);
+  let out = '', p = 0;
+  ev.forEach(e => { out += cell.source.slice(p, Math.max(p, e.pos)) + e.tok; p = Math.max(p, e.end); });
+  return out + cell.source.slice(p);
+}
+const nbvPrintBtnHtml = p => `<button type="button" class="nbe-pbtn" data-act="print-blank" data-s="${p.start}" data-e="${p.end}" tabindex="-1" title="print 안의 내용을 빈칸으로" aria-label="print 안의 내용을 빈칸으로"></button>`;
 const nbvMarkHtml = (k, ans) => `<mark class="nbe-mark" data-b="${k}">${nbvEsc(ans)}</mark>`;
 
 /** 편집용 마크다운: 원문 그대로 보이되 빈칸에 표시를 한다 (렌더링하면 소스 위치를 알 수 없다) */
@@ -438,14 +647,25 @@ function nbvCellEl(cell, ci, base, lang, ctx) {
   if (edit) {
     const head = document.createElement('div');
     head.className = 'nbe-head';
-    head.textContent = cell.type === 'code' ? `코드 ${label}` : '마크다운 (원문)';
+    const lab = document.createElement('span');
+    lab.className = 'nbe-label';
+    lab.textContent = cell.type === 'code' ? `코드 ${label}` : '마크다운 (원문)';
+    const tools = document.createElement('span');
+    tools.className = 'nbe-tools';
+    tools.append(nbvBtn('edit-cell', '수정', '이 셀의 내용을 직접 고칩니다'), nbvBtn('up', '↑', '위로'), nbvBtn('down', '↓', '아래로'), nbvBtn('del-cell', '삭제'));
+    head.append(lab, tools);
     const src = document.createElement(cell.type === 'code' ? 'pre' : 'div');
     src.className = 'nbe-src ' + (cell.type === 'code' ? 'code-surface nbe-codesrc' : 'nbe-mdsrc');
     src.dataset.ci = ci;
     if (cell.type === 'code') {
       const code = document.createElement('code');
       code.className = 'hljs';
-      code.innerHTML = nbvFill(nbvHighlight(nbvTokenized(cell, base), lang), cell, base, nbvMarkHtml);
+      // print(...) 마다 바로 뒤에 '+빈칸' 버튼. 버튼은 글자가 없어서(CSS 로만 그림) 소스 오프셋에 영향이 없다
+      const prints = nbvOpenPrints(cell.source, cell.blanks, lang).filter(p => !(cell.blanks || []).some(b => b.start < p.close && p.close < b.end));
+      const marks = prints.map((p, i) => ({ pos: p.close, tok: `QQPRINT${i}ENDQQ` }));
+      let html = nbvFill(nbvHighlight(nbvTokenizedEdit(cell, base, marks), lang), cell, base, nbvMarkHtml);
+      prints.forEach((p, i) => { html = html.split(`QQPRINT${i}ENDQQ`).join(nbvPrintBtnHtml(p)); });
+      code.innerHTML = html;
       src.appendChild(code);
     } else {
       src.innerHTML = nbvRawWithMarks(cell);
@@ -457,15 +677,18 @@ function nbvCellEl(cell, ci, base, lang, ctx) {
     if (cell.type === 'code' && (cell.outputs || []).length) {
       const det = document.createElement('details');
       det.className = 'nbe-outs';
+      det.open = true;
       const sum = document.createElement('summary');
       sum.textContent = `출력 ${cell.outputs.length}개`;
-      det.append(sum, nbvOutputsEl(cell.outputs));
+      det.append(sum, nbvOutputsEl(cell.outputs, ctx, 0, ci));
       el.appendChild(det);
     }
     return el;
   }
 
   // ── 학습용 ──
+  // 비어 있는 셀(편집 중 만들었다가 내용을 안 채운 셀)은 그리지 않는다
+  if (!(cell.source || '').trim() && !(cell.blanks || []).length && !(cell.outputs || []).length) return document.createDocumentFragment();
   const gutter = document.createElement('div');
   gutter.className = 'nbv-gutter';
   gutter.textContent = label;
@@ -495,7 +718,7 @@ function nbvCellEl(cell, ci, base, lang, ctx) {
     g.textContent = res && cell.exec != null ? `Out [${cell.exec}]:` : '';
     const b = document.createElement('div');
     b.className = 'nbv-body';
-    b.appendChild(nbvOutputsEl(cell.outputs));
+    b.appendChild(nbvOutputsEl(cell.outputs, ctx, base + (cell.blanks || []).length, ci));
     wrap.append(g, b);
     const frag = document.createDocumentFragment();
     frag.append(el, wrap);
@@ -507,15 +730,25 @@ function nbvCellEl(cell, ci, base, lang, ctx) {
 function nbvBuildView(card, ctx) {
   const root = document.createElement('div');
   root.className = 'nbv' + (ctx.mode === 'edit' ? ' nbv-edit' : '') + (ctx.mode !== 'edit' && (card.cells || []).length > 60 ? ' nbv-big' : '');
+  const edit = ctx.mode === 'edit';
+  const bar = after => {
+    const d = document.createElement('div');
+    d.className = 'nbe-insert';
+    d.dataset.after = after;
+    d.append(nbvBtn('add-md', '+ 마크다운'), nbvBtn('add-code', '+ 코드'));
+    return d;
+  };
+  if (edit) root.appendChild(bar(-1));
   let base = 0;
   (card.cells || []).forEach((cell, ci) => {
     root.appendChild(nbvCellEl(cell, ci, base, card.lang, ctx));
-    base += (cell.blanks || []).length;
+    if (edit) root.appendChild(bar(ci));
+    base += nbvCellBlankCount(cell);
   });
   return root;
 }
-/** 셀 ci 앞까지의 빈칸 개수 */
-function nbvBaseOf(cells, ci) { let n = 0; for (let k = 0; k < ci; k++) n += (cells[k].blanks || []).length; return n; }
+/** 셀 ci 앞까지의 빈칸 개수 (소스 + 출력) */
+function nbvBaseOf(cells, ci) { let n = 0; for (let k = 0; k < ci; k++) n += nbvCellBlankCount(cells[k]); return n; }
 
 /* ────────────────────────────────────────────────────────────
    7. 선택 영역 ↔ 소스 오프셋 (편집기)
