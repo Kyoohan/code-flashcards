@@ -144,8 +144,7 @@ function nbvHeadingOf(src) {
 function nbvGroup(cells, mode, depth, fallback) {
   const groups = [];
   if (mode === 'whole') {
-    const h = cells.map(c => c.type === 'markdown' && nbvHeadingOf(c.source)).find(Boolean);
-    return cells.length ? [{ title: (h && h.text) || fallback, cells: cells.slice() }] : [];
+    return cells.length ? [{ title: fallback, cells: cells.slice() }] : [];
   }
   if (mode === 'cell') {
     let heading = '', pend = [], n = 0;
@@ -507,7 +506,7 @@ function nbvCellEl(cell, ci, base, lang, ctx) {
 
 function nbvBuildView(card, ctx) {
   const root = document.createElement('div');
-  root.className = 'nbv' + (ctx.mode === 'edit' ? ' nbv-edit' : '');
+  root.className = 'nbv' + (ctx.mode === 'edit' ? ' nbv-edit' : '') + (ctx.mode !== 'edit' && (card.cells || []).length > 60 ? ' nbv-big' : '');
   let base = 0;
   (card.cells || []).forEach((cell, ci) => {
     root.appendChild(nbvCellEl(cell, ci, base, card.lang, ctx));

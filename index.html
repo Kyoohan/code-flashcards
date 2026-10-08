@@ -452,6 +452,8 @@ textarea.code-surface::placeholder { color: #5a6070; }
    노트북 뷰어 (학습 화면) — 마크다운 · 코드 · 출력
    ============================================================ */
 #nb-stage { margin-top: 2px; }
+/* 셀이 많은 노트북은 화면 밖 셀의 렌더링을 미룬다 (포커스·스크롤이 닿으면 자동으로 그려진다) */
+.nbv-big .nbv-cell { content-visibility: auto; contain-intrinsic-size: auto 150px; }
 .nbv { display: flex; flex-direction: column; gap: 4px; }
 .nbv-cell { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 10px; align-items: start; }
 @media (max-width: 640px) { .nbv-cell { grid-template-columns: minmax(0, 1fr); gap: 2px; } .nbv-gutter { display: none; } }
@@ -1072,7 +1074,8 @@ pre.answer-code {
           <div class="stage-actions">
             <button class="btn btn-primary grow" id="btn-check">확인 <span class="kbd">⌘↵</span></button>
             <button class="btn btn-next grow" id="btn-next" hidden>다음 문제 <span class="kbd">↵</span></button>
-            <button class="btn btn-quiet" id="btn-giveup">정답 보기</button>
+            <button class="btn btn-quiet" id="btn-jump" hidden title="아직 안 푼 첫 빈칸으로 이동">빈칸으로 ↓</button>
+          <button class="btn btn-quiet" id="btn-giveup">정답 보기</button>
           </div>
         </div>
       </div>
@@ -1175,7 +1178,7 @@ pre.answer-code {
     <div class="sheet-head">
       <div>
         <h3>노트북 가져오기</h3>
-        <div class="sub" id="nb-sub">노트북을 빈칸을 뚫을 수 있는 뷰어 카드로 가져옵니다</div>
+        <div class="sub" id="nb-sub">노트북 전체를 빈칸을 뚫을 수 있는 뷰어로 가져옵니다</div>
       </div>
       <button class="icon-btn" data-close="nb-modal" aria-label="닫기">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
@@ -1189,22 +1192,6 @@ pre.answer-code {
       </div>
       <div id="nb-result" hidden>
         <div class="nb-controls">
-          <div>
-            <div class="ctl-label">카드 나누기</div>
-            <div class="seg" id="nb-mode">
-              <button data-v="section" aria-pressed="true">제목별</button>
-              <button data-v="cell" aria-pressed="false">코드 셀별</button>
-              <button data-v="whole" aria-pressed="false">노트북 통째로</button>
-            </div>
-          </div>
-          <div id="nb-depth-wrap">
-            <div class="ctl-label">제목 깊이</div>
-            <div class="seg" id="nb-depth">
-              <button data-v="1" aria-pressed="false"># 만</button>
-              <button data-v="2" aria-pressed="false"># ~ ##</button>
-              <button data-v="6" aria-pressed="true">모든 제목</button>
-            </div>
-          </div>
           <div>
             <div class="ctl-label">출력 (표·그래프·결과)</div>
             <div class="seg" id="nb-outputs">
@@ -1234,7 +1221,7 @@ pre.answer-code {
             <input class="text-input" id="nb-deck-name" placeholder="덱 이름">
           </div>
         </div>
-        <div class="hint" id="nb-note" style="margin:-4px 0 14px">가져온 뒤 <b>카드 편집</b>에서 마크다운 텍스트나 코드를 드래그해 빈칸을 만들 수 있습니다.</div>
+        <div class="hint" id="nb-note" style="margin:-4px 0 14px">노트북 한 개가 카드 한 개로 가져와지고, 학습 화면에서 처음부터 끝까지 이어서 스크롤합니다. 가져온 뒤 <b>카드 편집</b>에서 텍스트나 코드를 드래그해 빈칸을 만드세요.</div>
         <div class="nb-list" id="nb-list"></div>
       </div>
     </div>
@@ -2728,6 +2715,7 @@ function showCard() {
   $('btn-check').hidden = false;
   $('btn-next').hidden = true;
   $('btn-giveup').hidden = false;
+  $('btn-jump').hidden = true;
 
   const nb = isNb(card);
   $('stage-panel').classList.toggle('nb-mode', nb);
@@ -2746,6 +2734,7 @@ function showCard() {
       if (prev instanceof Set) openSet = prev;
     }
     renderBlanks(card, openSet);
+    $('btn-jump').hidden = !nb;
   } else if (nb) {
     // 빈칸이 없는 노트북 카드는 읽기 전용으로 보여주고 넘어가게만 한다
     $('badge-mode').textContent = '노트북 · 빈칸 없음';
@@ -3137,6 +3126,7 @@ function updateBlankBadge() {
   const el = $('badge-progress');
   el.hidden = false;
   el.textContent = `${done} / ${bs.open}`;
+  updateMeter();     // 카드 한 장짜리 긴 노트북에서도 진행 막대가 빈칸마다 움직이게
 }
 
 function feedback(kind, title, desc) {
@@ -3150,6 +3140,7 @@ function feedback(kind, title, desc) {
   return fb;
 }
 function toNext() {
+  $('btn-jump').hidden = true;
   $('btn-check').hidden = true;
   $('btn-giveup').hidden = true;
   $('btn-next').hidden = false;
@@ -3301,8 +3292,14 @@ function updateMeter() {
   $('stat-left').textContent = activeQueue.length;
   $('stat-next').textContent = nextRoundMap.size;
   $('badge-queue').textContent = activeQueue.length ? `${activeQueue.length}문제 남음` : '';
-  const done = Math.max(0, roundTotal - activeQueue.length);
-  const pct = roundTotal ? Math.round(done / roundTotal * 100) : 0;
+  // 노트북처럼 카드가 한 장뿐이어도 진행이 보이도록, 지금 푸는 카드의 빈칸 진행을 분수로 더한다
+  let frac = 0;
+  if (currentCardId && activeQueue.length && bs.open > 0) {
+    const solved = bs.inputs.filter(i => bs.locked.has(Number(i.dataset.i)) && !bs.frozen.has(Number(i.dataset.i))).length;
+    frac = solved / bs.open;
+  }
+  const done = Math.max(0, roundTotal - activeQueue.length) + frac;
+  const pct = roundTotal ? Math.min(100, Math.round(done / roundTotal * 100)) : 0;
   $('progress-pct').textContent = pct + '%';
   $('progress-bar').style.width = pct + '%';
 }
@@ -3401,6 +3398,12 @@ $('btn-check').addEventListener('click', () => {
   } else checkFull();
 });
 $('btn-next').addEventListener('click', advance);
+$('btn-jump').addEventListener('click', () => {
+  const t = bs.inputs.find(i => !i.disabled);
+  if (!t) return;
+  t.scrollIntoView({ block: 'center' });
+  t.focus({ preventScroll: true });
+});
 $('btn-giveup').addEventListener('click', giveUp);
 $('fb-accept').addEventListener('click', () => {
   const card = cardMap.get(currentCardId);
@@ -4448,7 +4451,7 @@ let nbDoc = null;        // { lang, cells, fileName } — 파싱된 노트북 (�
 let nbCards = [];        // 옵션을 적용해 만든 카드
 let nbStats = [];        // 카드별 통계(미리보기용)
 let nbPicked = [];       // 선택 여부
-let nbOpts = { mode: 'section', depth: '6', blank: 'off', outputs: 'all', target: 'new' };
+let nbOpts = { blank: 'off', outputs: 'all', target: 'new' };
 let nbFileName = '';
 
 const fmtKB = n => n >= 1048576 ? (n / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round(n / 1024)) + 'KB';
@@ -4460,7 +4463,8 @@ function nbSnippetHtml(card) {
 }
 
 function buildNbCards() {
-  const groups = nbvGroup(nbDoc.cells, nbOpts.mode, Number(nbOpts.depth), nbDoc.fileName);
+  // 노트북 한 개 = 카드 한 개. 셀을 나누지 않고 처음부터 끝까지 이어서 보여준다
+  const groups = nbvGroup(nbDoc.cells, 'whole', 0, nbDoc.fileName);
   nbCards = groups.map(g => nbvMakeCard(g, nbDoc.lang, { blank: nbOpts.blank, outputs: nbOpts.outputs }));
   nbStats = nbCards.map(nbvCardStats);
   // 코드가 없는 텍스트 전용 섹션은 기본으로 빼 둔다 (원하면 체크)
@@ -4587,8 +4591,6 @@ function bindSeg(id, key, after) {
   });
 }
 const rebuildNb = () => { if (nbDoc) { buildNbCards(); renderNbList(); } };
-bindSeg('nb-mode', 'mode', () => { $('nb-depth-wrap').style.display = nbOpts.mode === 'section' ? '' : 'none'; rebuildNb(); });
-bindSeg('nb-depth', 'depth', rebuildNb);
 bindSeg('nb-outputs', 'outputs', rebuildNb);
 bindSeg('nb-blank', 'blank', rebuildNb);
 bindSeg('nb-target', 'target', () => { $('nb-name-wrap').style.display = nbOpts.target === 'new' ? '' : 'none'; });
