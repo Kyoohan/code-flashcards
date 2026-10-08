@@ -296,7 +296,7 @@ html[data-glass="off"] .lens { display: none; }
   transition: opacity .15s, color .15s, transform .15s;
 }
 /* 표시하지 않은 별은 흐리게 두고, 코드 영역에 마우스를 올렸을 때만 드러낸다 */
-#blank-stage:hover .fav-star { opacity: .45; }
+#blank-stage:hover .fav-star, .nbv:hover .fav-star { opacity: .45; }
 .fav-star svg { width: 15px; height: 15px; vertical-align: -2px; }
 .fav-star:hover { opacity: 1; color: #fbbf24; transform: scale(1.18); }
 .fav-star.on { opacity: 1; color: #fbbf24; }
@@ -407,22 +407,140 @@ textarea.code-surface::placeholder { color: #5a6070; }
    글자 수가 그대로 힌트가 되므로, 폭은 오직 사용자가 입력한 내용으로만 늘어난다. */
 :root { --blank-w: 112px; }
 .blank-input {
+  /* 기본값은 어두운 코드 표면용. 마크다운 본문 안에서는 아래에서 테마 색으로 바꾼다 */
+  --bi-bg: rgba(255,255,255,.08);   --bi-line: #8b85ff; --bi-ink: #a5f3fc;
+  --bi-bgf: rgba(139,133,255,.2);   --bi-linef: #b9b5ff;
+  --bi-ok-bg: rgba(69,214,163,.16); --bi-ok-line: #45d6a3; --bi-ok-ink: #7defc0;
+  --bi-ng-bg: rgba(255,112,112,.18); --bi-ng-line: #ff7070; --bi-ng-ink: #ffb3b3;
+  --bi-rv-bg: rgba(229,161,58,.16); --bi-rv-line: #e5a13a; --bi-rv-ink: #f5c66b;
+  --bi-fz-bg: rgba(69,214,163,.1);  --bi-fz-line: rgba(69,214,163,.5); --bi-fz-ink: #6fd8ae;
   display: inline-block; vertical-align: baseline;
   width: var(--blank-w); padding: 0 6px; margin: 0 5px;
   transition: width .12s ease, background .15s, border-color .15s;
-  background: rgba(255,255,255,.08);
-  border: none; border-bottom: 2px solid #8b85ff;
+  background: var(--bi-bg);
+  border: none; border-bottom: 2px solid var(--bi-line);
   border-radius: 5px 5px 0 0;
-  color: #a5f3fc; caret-color: #a5f3fc;
+  color: var(--bi-ink); caret-color: var(--bi-ink);
   font-family: inherit; font-size: 13px; line-height: 1.5;
   outline: none;
 }
-.blank-input:focus { background: rgba(139,133,255,.2); border-bottom-color: #b9b5ff; }
-.blank-input.ok { background: rgba(69,214,163,.16); border-bottom-color: #45d6a3; color: #7defc0; pointer-events: none; }
-.blank-input.ng { background: rgba(255,112,112,.18); border-bottom-color: #ff7070; color: #ffb3b3; }
-.blank-input.revealed { background: rgba(229,161,58,.16); border-bottom-color: #e5a13a; color: #f5c66b; pointer-events: none; }
+.blank-input:focus { background: var(--bi-bgf); border-bottom-color: var(--bi-linef); }
+.blank-input.ok { background: var(--bi-ok-bg); border-bottom-color: var(--bi-ok-line); color: var(--bi-ok-ink); pointer-events: none; }
+.blank-input.ng { background: var(--bi-ng-bg); border-bottom-color: var(--bi-ng-line); color: var(--bi-ng-ink); }
+.blank-input.revealed { background: var(--bi-rv-bg); border-bottom-color: var(--bi-rv-line); color: var(--bi-rv-ink); pointer-events: none; }
+.blank-input.frozen { background: var(--bi-fz-bg); border-bottom-color: var(--bi-fz-line); color: var(--bi-fz-ink); pointer-events: none; }
+/* 마크다운 본문(테마 배경) 안의 빈칸 — 어두운 코드 블록 안에서는 기본값으로 되돌린다 */
+.md-body .blank-input {
+  --bi-bg: var(--accent-soft); --bi-line: var(--accent); --bi-ink: var(--ink-1);
+  --bi-bgf: var(--accent-soft); --bi-linef: var(--accent-ink);
+  --bi-ok-bg: var(--good-soft); --bi-ok-line: var(--good); --bi-ok-ink: var(--good);
+  --bi-ng-bg: var(--bad-soft);  --bi-ng-line: var(--bad);  --bi-ng-ink: var(--bad);
+  --bi-rv-bg: var(--warn-soft); --bi-rv-line: var(--warn); --bi-rv-ink: var(--warn);
+  --bi-fz-bg: var(--sunken);    --bi-fz-line: var(--good); --bi-fz-ink: var(--ink-2);
+  font-family: 'IBM Plex Sans KR', system-ui, sans-serif; font-size: 14px;
+}
+.md-body pre .blank-input {
+  --bi-bg: rgba(255,255,255,.08);   --bi-line: #8b85ff; --bi-ink: #a5f3fc;
+  --bi-bgf: rgba(139,133,255,.2);   --bi-linef: #b9b5ff;
+  --bi-ok-bg: rgba(69,214,163,.16); --bi-ok-line: #45d6a3; --bi-ok-ink: #7defc0;
+  --bi-ng-bg: rgba(255,112,112,.18); --bi-ng-line: #ff7070; --bi-ng-ink: #ffb3b3;
+  --bi-rv-bg: rgba(229,161,58,.16); --bi-rv-line: #e5a13a; --bi-rv-ink: #f5c66b;
+  --bi-fz-bg: rgba(69,214,163,.1);  --bi-fz-line: rgba(69,214,163,.5); --bi-fz-ink: #6fd8ae;
+  font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px;
+}
+/* ============================================================
+   노트북 뷰어 (학습 화면) — 마크다운 · 코드 · 출력
+   ============================================================ */
+#nb-stage { margin-top: 2px; }
+.nbv { display: flex; flex-direction: column; gap: 4px; }
+.nbv-cell { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 10px; align-items: start; }
+@media (max-width: 640px) { .nbv-cell { grid-template-columns: minmax(0, 1fr); gap: 2px; } .nbv-gutter { display: none; } }
+.nbv-gutter {
+  padding-top: 13px; text-align: right;
+  font: 500 10.5px/1.4 'JetBrains Mono', ui-monospace, monospace; color: var(--ink-4); white-space: nowrap; user-select: none;
+}
+.nbv-body { min-width: 0; }
+.nbv-md { margin-top: 6px; }
+.nbv-code { margin-top: 8px; }
+.nbv-outrow { margin-top: 0; }
+.nbv-gutter-out { padding-top: 10px; color: var(--accent-ink); }
+.nbv-src { margin: 0; padding: 14px 16px; overflow-x: auto; white-space: pre; line-height: 2.05; font-size: 13px; }
+.nbv-src code { font: inherit; }
 
-.blank-input.frozen { background: rgba(69,214,163,.1); border-bottom-color: rgba(69,214,163,.5); color: #6fd8ae; pointer-events: none; }
+/* 코드 셀 아래 출력 */
+.nbv-outs { display: flex; flex-direction: column; gap: 6px; padding: 2px 2px 4px; }
+.nbv-pre {
+  margin: 0; padding: 9px 12px; overflow-x: auto; max-height: 340px;
+  background: var(--sunken); color: var(--ink-1); border-radius: var(--r-sm);
+  font: 12.5px/1.65 'JetBrains Mono', ui-monospace, monospace; white-space: pre;
+}
+.nbv-out.is-err .nbv-pre { background: var(--warn-soft); }
+.nbv-out-error .nbv-pre { background: var(--bad-soft); color: var(--bad); }
+.nbv-html { overflow-x: auto; max-height: 380px; font-size: 12.5px; color: var(--ink-1); }
+.nbv-html table { border-collapse: collapse; margin: 2px 0; font: 12px/1.5 'JetBrains Mono', ui-monospace, monospace; }
+.nbv-html th, .nbv-html td { padding: 4px 11px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.nbv-html th { font-weight: 700; color: var(--ink-2); background: var(--sunken); }
+.nbv-html thead th { border-bottom: 1px solid var(--line-strong); }
+.nbv-html tbody tr:hover td { background: var(--sunken); }
+.nbv-html p, .nbv-html div { margin: 2px 0; }
+.nbv-img { display: block; max-width: 100%; height: auto; background: #fff; border-radius: var(--r-sm); border: 1px solid var(--line); }
+
+/* 렌더링된 마크다운 */
+.md-body { font-size: 14.5px; line-height: 1.78; color: var(--ink-1); word-break: break-word; }
+.md-body > :first-child { margin-top: 0; }
+.md-body > :last-child { margin-bottom: 0; }
+.md-body .md-p { margin: 0 0 .7em; max-width: 78ch; }
+.md-body .md-h { margin: 1.1em 0 .45em; font-weight: 700; letter-spacing: -0.02em; line-height: 1.3; }
+.md-body .md-h1 { font-size: 1.55em; } .md-body .md-h2 { font-size: 1.32em; } .md-body .md-h3 { font-size: 1.15em; }
+.md-body .md-h4, .md-body .md-h5, .md-body .md-h6 { font-size: 1em; color: var(--ink-2); }
+.md-body .md-list { margin: 0 0 .7em; padding-left: 1.5em; }
+.md-body .md-list li > .md-p { margin: 0; }
+.md-body .md-list li { margin: .12em 0; }
+.md-body .md-code { padding: 1px 6px; border-radius: 5px; background: var(--sunken); font: 12.5px 'JetBrains Mono', ui-monospace, monospace; }
+.md-body .md-pre { margin: 0 0 .8em; padding: 12px 14px; overflow-x: auto; border-radius: var(--r-sm); background: var(--code-bg); color: var(--code-ink); font: 12.5px/2 'JetBrains Mono', ui-monospace, monospace; white-space: pre; }
+.md-body .md-pre code { font: inherit; }
+.md-body .md-quote { margin: 0 0 .8em; padding: 2px 14px; border-left: 3px solid var(--line-strong); color: var(--ink-2); }
+.md-body .md-hr { border: none; border-top: 1px solid var(--line); margin: 1em 0; }
+.md-body a { color: var(--accent-ink); text-underline-offset: 3px; }
+.md-body .md-imgalt { color: var(--ink-3); font-size: .92em; }
+.md-body .md-table-wrap { overflow-x: auto; margin: 0 0 .9em; }
+.md-body .md-table { border-collapse: collapse; font-size: 13px; }
+.md-body .md-table th, .md-body .md-table td { padding: 5px 12px; border: 1px solid var(--line); }
+.md-body .md-table th { background: var(--sunken); font-weight: 700; }
+
+/* 긴 노트북에서는 피드백·버튼 도크가 화면 아래에 붙어 따라온다 */
+.stage-dock { display: flex; flex-direction: column; }
+.stage.nb-mode .stage-dock {
+  position: sticky; bottom: 12px; z-index: 6; margin-top: 14px; padding: 10px 12px;
+  border-radius: 18px; background: var(--panel-solid); border: 1px solid var(--line-strong);
+  box-shadow: 0 18px 40px -20px rgba(0,0,0,.55);
+}
+.stage.nb-mode .stage-dock .feedback { margin-top: 0; margin-bottom: 8px; max-height: 38vh; overflow-y: auto; }
+.stage.nb-mode .stage-dock .stage-actions { margin-top: 0; }
+.stage.nb-mode #inline-hint { margin: 0 0 6px; }
+
+/* ============================================================
+   노트북 편집기 — 드래그로 빈칸 지정
+   ============================================================ */
+.nbe-pane { gap: 12px; }
+.nbe-guide { font-size: 12.5px; color: var(--ink-3); line-height: 1.6; padding: 10px 12px; border-radius: var(--r-sm); background: var(--accent-soft); }
+.nbe-guide .kbd { background: var(--sunken); }
+.nbe-cells { display: flex; flex-direction: column; gap: 10px; }
+.nbe-cell { border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 12px 12px; background: var(--raise); }
+.nbe-head { font: 600 10.5px/1 'JetBrains Mono', ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-4); margin-bottom: 8px; }
+.nbe-src { cursor: text; user-select: text; -webkit-user-select: text; }
+.nbe-mdsrc { white-space: pre-wrap; word-break: break-word; font: 13.5px/1.75 'IBM Plex Sans KR', system-ui, sans-serif; color: var(--ink-1); }
+.nbe-codesrc { margin: 0; padding: 12px 14px; overflow-x: auto; white-space: pre; line-height: 1.8; font-size: 12.5px; }
+.nbe-codesrc code { font: inherit; }
+.nbe-mark { background: rgba(139,133,255,.28); color: inherit; border-radius: 4px; box-shadow: inset 0 -2px 0 rgba(139,133,255,.85); padding: 0 1px; }
+.nbe-codesrc .nbe-mark { color: #cfccff; }
+.nbe-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.nbe-chips:empty { display: none; }
+.nbe-outs { margin-top: 8px; }
+.nbe-outs summary { cursor: pointer; font-size: 11.5px; color: var(--ink-3); padding: 2px 0; }
+.nbe-chip { position: fixed; z-index: 90; }
+.nbe-chip[hidden] { display: none; }
+
 #inline-hint { font-size: 12px; min-height: 1.5em; margin-top: 8px; font-weight: 600; }
 #inline-hint.ok { color: var(--good); }
 #inline-hint.ng { color: var(--bad); }
@@ -904,7 +1022,7 @@ pre.answer-code {
     </aside>
 
     <!-- ── 스테이지 ───────────────────────────────────── -->
-    <main class="panel stage">
+    <main class="panel stage" id="stage-panel">
       <div class="lens liquidGL"></div>
       <div class="panel-body" data-liquid-ignore>
         <div class="badges">
@@ -924,33 +1042,38 @@ pre.answer-code {
         </div>
 
         <div id="mode-blank" hidden>
-          <label class="field-label">빈칸 채우기 — Enter로 하나씩 확인</label>
+          <label class="field-label" id="blank-label">빈칸 채우기 — Enter로 하나씩 확인</label>
           <div id="blank-stage" class="code-surface"></div>
-          <div id="inline-hint"></div>
+          <div id="nb-stage" hidden></div>
         </div>
 
         <div class="spacer"></div>
 
-        <div class="feedback" id="feedback" hidden>
-          <div class="feedback-head"><h3 id="fb-title"></h3></div>
-          <p id="fb-desc"></p>
-          <button class="chip-btn fb-accept" id="fb-accept" hidden>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>
-            내 답을 정답으로 인정</button>
-          <div class="sub" id="fb-diff" hidden>
-            <div class="sub-label">비교 — 초록: 정답 / 빨강: 입력 오류</div>
-            <div class="diff-out" id="diff-out"></div>
+        <!-- 피드백·힌트·버튼은 한 덩어리로 묶는다. 긴 노트북에서는 이 도크가 화면 아래에 붙어 따라온다 -->
+        <div class="stage-dock" id="stage-dock">
+          <div class="feedback" id="feedback" hidden>
+            <div class="feedback-head"><h3 id="fb-title"></h3></div>
+            <p id="fb-desc"></p>
+            <button class="chip-btn fb-accept" id="fb-accept" hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>
+              내 답을 정답으로 인정</button>
+            <div class="sub" id="fb-diff" hidden>
+              <div class="sub-label">비교 — 초록: 정답 / 빨강: 입력 오류</div>
+              <div class="diff-out" id="diff-out"></div>
+            </div>
+            <div class="sub" id="fb-answer" hidden>
+              <div class="sub-label">정답 코드</div>
+              <pre class="answer-code"><code id="answer-code" class="hljs"></code></pre>
+            </div>
           </div>
-          <div class="sub" id="fb-answer" hidden>
-            <div class="sub-label">정답 코드</div>
-            <pre class="answer-code"><code id="answer-code" class="hljs"></code></pre>
-          </div>
-        </div>
 
-        <div class="stage-actions">
-          <button class="btn btn-primary grow" id="btn-check">확인 <span class="kbd">⌘↵</span></button>
-          <button class="btn btn-next grow" id="btn-next" hidden>다음 문제 <span class="kbd">↵</span></button>
-          <button class="btn btn-quiet" id="btn-giveup">정답 보기</button>
+          <div id="inline-hint"></div>
+
+          <div class="stage-actions">
+            <button class="btn btn-primary grow" id="btn-check">확인 <span class="kbd">⌘↵</span></button>
+            <button class="btn btn-next grow" id="btn-next" hidden>다음 문제 <span class="kbd">↵</span></button>
+            <button class="btn btn-quiet" id="btn-giveup">정답 보기</button>
+          </div>
         </div>
       </div>
     </main>
@@ -979,7 +1102,7 @@ pre.answer-code {
         <div class="search-wrap"><input class="search" id="editor-search" type="search" placeholder="설명·코드 검색"></div>
         <div class="card-list" id="card-list"></div>
       </div>
-      <div class="editor-form">
+      <div class="editor-form" id="plain-pane">
         <div>
           <label class="field-label" for="edit-def">문제 설명</label>
           <textarea class="def" id="edit-def" placeholder="예: 리스트를 역순으로 정렬하는 코드를 작성하라"></textarea>
@@ -1009,12 +1132,25 @@ pre.answer-code {
           <div class="preview-box" id="blank-preview"></div>
         </div>
       </div>
+
+      <div class="editor-form nbe-pane" id="nbe-pane" hidden>
+        <div>
+          <label class="field-label" for="nbe-title">카드 제목</label>
+          <input class="text-input" id="nbe-title" placeholder="예: 1. 파일 입출력">
+        </div>
+        <div class="nbe-guide">
+          마크다운 텍스트나 코드를 <b>드래그</b>한 뒤 <span class="kbd">⌘B</span> 또는 선택 위에 뜨는 버튼으로 빈칸을 만드세요.
+          노트북 내용 자체는 바뀌지 않고, 어느 부분이 빈칸인지만 저장됩니다.
+        </div>
+        <div class="nbe-cells" id="nbe-cells"></div>
+      </div>
     </div>
     <div class="sheet-foot">
       <div class="left" id="editor-status"></div>
       <button class="btn btn-quiet btn-sm" id="btn-del-card">카드 삭제</button>
     </div>
   </div>
+  <div class="float-chip nbe-chip" id="nbe-chip" hidden>빈칸으로 지정 <span class="kbd">⌘B</span></div>
 </div>
 
 <!-- ── 통계 ────────────────────────────────────────────── -->
@@ -1039,7 +1175,7 @@ pre.answer-code {
     <div class="sheet-head">
       <div>
         <h3>노트북 가져오기</h3>
-        <div class="sub" id="nb-sub">.ipynb 파일의 마크다운 제목을 기준으로 섹션을 자동 분리합니다</div>
+        <div class="sub" id="nb-sub">노트북을 빈칸을 뚫을 수 있는 뷰어 카드로 가져옵니다</div>
       </div>
       <button class="icon-btn" data-close="nb-modal" aria-label="닫기">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
@@ -1049,19 +1185,36 @@ pre.answer-code {
       <div class="drop-zone" id="nb-drop">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
         <h4>.ipynb 파일을 여기에 놓으세요</h4>
-        <p>또는 클릭해서 선택 · 마크다운 설명과 코드 셀이 자동으로 짝지어집니다</p>
+        <p>또는 클릭해서 선택 · 마크다운, 코드, 실행 결과가 노트북 모양 그대로 학습 화면에 나타납니다</p>
       </div>
       <div id="nb-result" hidden>
         <div class="nb-controls">
           <div>
-            <div class="ctl-label">분리 기준</div>
+            <div class="ctl-label">카드 나누기</div>
             <div class="seg" id="nb-mode">
-              <button data-v="section" aria-pressed="true">섹션(제목)</button>
-              <button data-v="cell" aria-pressed="false">코드 셀</button>
+              <button data-v="section" aria-pressed="true">제목별</button>
+              <button data-v="cell" aria-pressed="false">코드 셀별</button>
+              <button data-v="whole" aria-pressed="false">노트북 통째로</button>
+            </div>
+          </div>
+          <div id="nb-depth-wrap">
+            <div class="ctl-label">제목 깊이</div>
+            <div class="seg" id="nb-depth">
+              <button data-v="1" aria-pressed="false"># 만</button>
+              <button data-v="2" aria-pressed="false"># ~ ##</button>
+              <button data-v="6" aria-pressed="true">모든 제목</button>
             </div>
           </div>
           <div>
-            <div class="ctl-label">빈칸 자동 생성</div>
+            <div class="ctl-label">출력 (표·그래프·결과)</div>
+            <div class="seg" id="nb-outputs">
+              <button data-v="all" aria-pressed="true">모두</button>
+              <button data-v="noimg" aria-pressed="false">이미지 제외</button>
+              <button data-v="none" aria-pressed="false">숨김</button>
+            </div>
+          </div>
+          <div>
+            <div class="ctl-label">코드 빈칸 자동 생성</div>
             <div class="seg" id="nb-blank">
               <button data-v="off" aria-pressed="true">없음</button>
               <button data-v="low" aria-pressed="false">적게</button>
@@ -1081,6 +1234,7 @@ pre.answer-code {
             <input class="text-input" id="nb-deck-name" placeholder="덱 이름">
           </div>
         </div>
+        <div class="hint" id="nb-note" style="margin:-4px 0 14px">가져온 뒤 <b>카드 편집</b>에서 마크다운 텍스트나 코드를 드래그해 빈칸을 만들 수 있습니다.</div>
         <div class="nb-list" id="nb-list"></div>
       </div>
     </div>
@@ -1181,6 +1335,7 @@ pre.answer-code {
 
 <div id="toasts" data-liquid-ignore></div>
 
+<script src="nbview.js?v=1"></script>
 <script>
 'use strict';
 
@@ -1320,8 +1475,17 @@ function sanitizeBlanks(list, term) {
 }
 
 /* 즐겨찾기 헬퍼 — 빈칸 객체의 fav 플래그로 관리하므로 카드와 함께 저장·동기화된다 */
-const favIndices = card => new Set((card.blanks || []).map((b, i) => b.fav ? i : -1).filter(i => i >= 0));
-const favCount = card => (card.blanks || []).filter(b => b.fav).length;
+/* 노트북 카드(kind:'notebook')는 빈칸이 셀마다 흩어져 있다. 카드 전체에서 0부터 이어지는 번호(셀 순서 → 빈칸 순서)로 다룬다. */
+const isNb = card => !!card && card.kind === 'notebook';
+function nbFlat(card) {
+  const out = [];
+  (card.cells || []).forEach((cell, ci) => (cell.blanks || []).forEach((b, bi) => out.push({ ci, bi, b })));
+  return out;
+}
+const allBlanks = card => isNb(card) ? nbFlat(card).map(x => x.b) : (card.blanks || []);
+const cardText = card => isNb(card) ? (card.cells || []).map(c => c.source).join('\n') : (card.term || '');
+const favIndices = card => new Set(allBlanks(card).map((b, i) => b.fav ? i : -1).filter(i => i >= 0));
+const favCount = card => allBlanks(card).filter(b => b.fav).length;
 function deckFavTotal() { return allCards.reduce((n, c) => n + favCount(c), 0); }
 function favCardIds() { return allCards.filter(c => favCount(c) > 0).map(c => c.id); }
 
@@ -1358,6 +1522,15 @@ function normalizeCard(raw) {
     blanks: [],
   };
   if (raw && raw.batchId) card.batchId = String(raw.batchId);   // 한 번에 추가된 묶음 표시
+  if (raw && raw.kind === 'notebook' && Array.isArray(raw.cells)) {
+    // 노트북 카드: 셀(마크다운·코드·출력)을 그대로 두고 빈칸은 셀별 소스 오프셋으로 가진다
+    card.kind = 'notebook';
+    card.lang = String(raw.lang || 'python');
+    card.cells = raw.cells.map(nbvNormalizeCell).filter(Boolean);
+    card.term = '';
+    card.blanks = [];
+    return card;
+  }
   if (raw && Array.isArray(raw.blanks) && raw.blanks.length) {
     card.blanks = sanitizeBlanks(raw.blanks, card.term);
   } else if (/\{\{[\s\S]*?\}\}/.test(card.term)) {
@@ -1383,7 +1556,8 @@ function segmentsOf(card) {
   if (pos < term.length) segs.push({ text: term.slice(pos), isBlank: false });
   return segs;
 }
-const hasBlanks = card => !!(card.blanks && card.blanks.length);
+const blankTotal = card => allBlanks(card).length;
+const hasBlanks = card => blankTotal(card) > 0;
 
 /** 텍스트 편집 후 빈칸 오프셋 재매핑 (단일 편집 구간 가정) */
 function remapBlanks(blanks, oldText, newText) {
@@ -2370,11 +2544,24 @@ function loadCards() {
   allCards = (Array.isArray(raw) ? raw : []).map(normalizeCard);
   cardMap = new Map(allCards.map(c => [c.id, c]));
 }
+/** localStorage 쓰기. 용량이 가득 차면(출력 이미지가 큰 노트북) 조용히 실패하지 않고 알린다 */
+let _quotaToastAt = 0;
+function lsSet(key, value) {
+  try { localStorage.setItem(key, value); return true; }
+  catch (e) {
+    if (Date.now() - _quotaToastAt > 4000) {
+      _quotaToastAt = Date.now();
+      toast('브라우저 저장 공간이 가득 찼습니다. 큰 노트북은 출력을 \'이미지 제외\'로 가져오세요', 'bad');
+    }
+    return false;
+  }
+}
 function saveCards() {
-  localStorage.setItem(cardsKey(activeDeckId), JSON.stringify(allCards));
+  const ok = lsSet(cardsKey(activeDeckId), JSON.stringify(allCards));
   cardMap = new Map(allCards.map(c => [c.id, c]));
   fsaSync();
   gist.schedule();
+  return ok;
 }
 function loadStats() { statsMap = new Map(safeParse(localStorage.getItem(statsKey(activeDeckId)), [])); }
 function saveStats() { localStorage.setItem(statsKey(activeDeckId), JSON.stringify([...statsMap])); gist.schedule(); }
@@ -2494,6 +2681,7 @@ function nextCard() {
 function advance() { activeQueue.shift(); nextCard(); }
 
 function showEmpty() {
+  $('stage-panel').classList.remove('nb-mode');
   $('question').innerHTML = '<span class="empty">아직 카드가 없습니다.\n왼쪽 <b>카드 편집</b>으로 직접 추가하거나, <b>노트북 가져오기</b>로 .ipynb 파일을 불러오세요.</span>';
   $('mode-blank').hidden = true;
   $('mode-full').hidden = true;
@@ -2508,6 +2696,7 @@ function showEmpty() {
   updateMeter();
 }
 function finishAll() {
+  $('stage-panel').classList.remove('nb-mode');
   currentCardId = null;
   clearProgress();
   $('question').innerHTML = '<div class="done"><h2>모두 마스터했습니다</h2><p>이 덱의 모든 카드를 정확히 입력했습니다.</p></div>';
@@ -2540,8 +2729,11 @@ function showCard() {
   $('btn-next').hidden = true;
   $('btn-giveup').hidden = false;
 
+  const nb = isNb(card);
+  $('stage-panel').classList.toggle('nb-mode', nb);
   if (hasBlanks(card)) {
-    $('badge-mode').textContent = '빈칸 채우기';
+    $('badge-mode').textContent = nb ? '노트북 빈칸' : '빈칸 채우기';
+    $('blank-label').textContent = nb ? '노트북 — 빈칸에 답을 쓰고 Enter로 하나씩 확인' : '빈칸 채우기 — Enter로 하나씩 확인';
     $('mode-full').hidden = true;
     $('mode-blank').hidden = false;
     // 즐겨찾기 복습 중에는 별표한 빈칸만 열고 나머지는 채워진 채로 보여준다
@@ -2553,7 +2745,19 @@ function showCard() {
       const prev = prevWrongMap.get(currentCardId);
       if (prev instanceof Set) openSet = prev;
     }
-    renderBlanks(segmentsOf(card), openSet);
+    renderBlanks(card, openSet);
+  } else if (nb) {
+    // 빈칸이 없는 노트북 카드는 읽기 전용으로 보여주고 넘어가게만 한다
+    $('badge-mode').textContent = '노트북 · 빈칸 없음';
+    $('blank-label').textContent = '노트북';
+    $('badge-progress').hidden = true;
+    $('mode-full').hidden = true;
+    $('mode-blank').hidden = false;
+    renderBlanks(card, null);
+    hint('', '이 카드에는 빈칸이 없습니다. 카드 편집에서 텍스트나 코드를 드래그해 빈칸을 만들 수 있습니다.');
+    $('btn-check').hidden = true;
+    $('btn-giveup').hidden = true;
+    $('btn-next').hidden = false;
   } else {
     $('badge-mode').textContent = '전체 코드';
     $('badge-progress').hidden = true;
@@ -2574,40 +2778,51 @@ function blankToken(i) {
   return s + 'ENDQQ';
 }
 
-function renderBlanks(segments, openSet) {
-  const host = $('blank-stage');
+function renderBlanks(card, openSet) {
+  const nb = isNb(card);
+  const host = nb ? $('nb-stage') : $('blank-stage');
+  $('blank-stage').hidden = nb;
+  $('nb-stage').hidden = !nb;
   host.innerHTML = '';
   $('inline-hint').textContent = '';
   bs = { inputs: [], locked: new Set(), wrong: new Set(), frozen: new Set(), revealed: new Set(), lastWrong: new Map(), open: 0 };
-  const favSet = favIndices(cardMap.get(currentCardId) || { blanks: [] });
+  const favSet = favIndices(card);
 
-  let full = '';
-  segments.forEach((seg, i) => { full += seg.isBlank ? blankToken(i) : seg.text; });
-
-  let html = esc(full);
-  try { if (window.hljs) html = hljs.highlightAuto(full).value; } catch (e) {}
-
-  let bi = 0;
-  segments.forEach((seg, i) => {
-    if (!seg.isBlank) return;
-    const idx = bi++;
+  // 빈칸 하나의 입력 요소 HTML. idx 는 카드 전체에서 0부터 이어지는 번호.
+  const tagFor = (idx, answer) => {
     const frozen = openSet !== null && !openSet.has(idx);
-    const ans = esc(seg.answer);
+    const ans = esc(answer);
     let tag;
     if (frozen) {
       // 이미 정답이 드러난 칸이므로 내용에 맞춰도 힌트가 되지 않는다
       bs.frozen.add(idx); bs.locked.add(idx);
-      tag = `<input type="text" class="blank-input frozen" data-i="${idx}" data-a="${ans}" value="${ans}" disabled style="width:${fitWidth(seg.answer)}px">`;
+      tag = `<input type="text" class="blank-input frozen" data-i="${idx}" data-a="${ans}" value="${ans.replace(/\s*\n\s*/g, ' ')}" disabled style="width:${fitWidth(answer)}px">`;
     } else {
       // 풀어야 하는 칸은 정답 길이와 무관하게 항상 같은 폭에서 시작한다
       bs.open++;
       tag = `<input type="text" class="blank-input" data-i="${idx}" data-a="${ans}" spellcheck="false" autocapitalize="off">`;
     }
-    tag += favStarHtml(idx, favSet.has(idx));
-    html = html.split(blankToken(i)).join(tag);
-  });
+    return tag + favStarHtml(idx, favSet.has(idx));
+  };
 
-  host.innerHTML = html;
+  if (nb) {
+    host.appendChild(nbvBuildView(card, { mode: 'study', lang: card.lang, makeTag: tagFor }));
+  } else {
+    const segments = segmentsOf(card);
+    let full = '';
+    segments.forEach((seg, i) => { full += seg.isBlank ? blankToken(i) : seg.text; });
+
+    let html = esc(full);
+    try { if (window.hljs) html = hljs.highlightAuto(full).value; } catch (e) {}
+
+    let bi = 0;
+    segments.forEach((seg, i) => {
+      if (!seg.isBlank) return;
+      html = html.split(blankToken(i)).join(tagFor(bi++, seg.answer));
+    });
+    host.innerHTML = html;
+  }
+
   host.querySelectorAll('.blank-input').forEach(inp => {
     bs.inputs.push(inp);
     if (!inp.disabled) {
@@ -2620,8 +2835,19 @@ function renderBlanks(segments, openSet) {
     btn.addEventListener('click', () => toggleFav(currentCardId, Number(btn.dataset.i)));
   });
   updateBlankBadge();
+
   const first = bs.inputs.find(i => !i.disabled);
-  if (first) first.focus();
+  if (nb) {
+    // 긴 노트북: 카드 맨 위부터 보여 주되, 첫 빈칸이 화면 밖이면 그 자리로 이동한다
+    if (first) first.focus({ preventScroll: true });
+    const q = $('question').getBoundingClientRect();
+    if (q.top < 0 || q.top > innerHeight * 0.5) $('question').scrollIntoView({ block: 'start' });
+    if (first) {
+      const r = first.getBoundingClientRect();
+      if (r.bottom > innerHeight - 160 || r.top < 0) first.scrollIntoView({ block: 'center' });
+    }
+  } else if (first) first.focus();
+  if (nb && !hasBlanks(card)) return;      // 읽기 전용 노트북 카드
   if (bs.open === 0) finishBlankCard(false);
 }
 
@@ -2631,12 +2857,10 @@ function renderBlanks(segments, openSet) {
 let _chW = 0;
 function blankCharWidth() {
   if (_chW) return _chW;
-  const host = $('blank-stage');
-  if (!host) return 7.9;
   const probe = document.createElement('span');
   probe.textContent = '0'.repeat(40);
-  probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;font-size:13px;';
-  host.appendChild(probe);
+  probe.style.cssText = "position:absolute;left:-9999px;visibility:hidden;white-space:pre;font:13px 'JetBrains Mono', ui-monospace, monospace;";
+  document.body.appendChild(probe);
   _chW = probe.getBoundingClientRect().width / 40;
   probe.remove();
   return _chW || 7.9;
@@ -2663,11 +2887,11 @@ function favStarHtml(idx, on) {
 /** 빈칸 하나의 즐겨찾기 토글 — 카드 데이터에 저장되므로 Gist 동기화에도 함께 실린다 */
 function toggleFav(cardId, idx) {
   const card = cardMap.get(cardId);
-  if (!card || !card.blanks || !card.blanks[idx]) return;
-  const b = card.blanks[idx];
+  const b = card && allBlanks(card)[idx];
+  if (!b) return;
   if (b.fav) delete b.fav; else b.fav = true;
   saveCards();
-  const btn = $('blank-stage').querySelector(`.fav-star[data-i="${idx}"]`);
+  const btn = (isNb(card) ? $('nb-stage') : $('blank-stage')).querySelector(`.fav-star[data-i="${idx}"]`);
   if (btn) {
     const on = !!b.fav;
     btn.classList.toggle('on', on);
@@ -2785,6 +3009,10 @@ function clearBatchScope() {
   toast('전체 카드로 돌아왔습니다');
 }
 
+/** 빈칸 답 비교용 정규화 — 여러 줄에 걸친 빈칸도 한 줄로 쳐서 맞출 수 있게 줄바꿈까지 지운다 */
+const normBlank = s => normalize(s).replace(/\n/g, '');
+const oneLine = s => String(s).replace(/\s*\n\s*/g, ' ');
+
 function onBlankKey(e) {
   if (e.key !== 'Enter') return;
   e.preventDefault();
@@ -2801,12 +3029,12 @@ function onBlankKey(e) {
     return;
   }
   // 직전에 틀린 답을 고치지 않고 다시 Enter → 모르겠다는 뜻으로 보고 정답을 보여준다
-  if (bs.lastWrong.get(idx) === normalize(inp.value)) {
+  if (bs.lastWrong.get(idx) === normBlank(inp.value)) {
     revealBlank(inp, idx);
     return;
   }
 
-  if (normalize(inp.value) === normalize(inp.dataset.a)) {
+  if (normBlank(inp.value) === normBlank(inp.dataset.a)) {
     inp.classList.remove('ng');
     inp.classList.add('ok');
     inp.disabled = true;
@@ -2819,7 +3047,7 @@ function onBlankKey(e) {
     else finishBlankCard(bs.wrong.size > 0);
   } else {
     inp.classList.add('ng');
-    bs.lastWrong.set(idx, normalize(inp.value));
+    bs.lastWrong.set(idx, normBlank(inp.value));
     bs.wrong.add(idx);
     isRetryMode = true;
     $('badge-retry').hidden = false;
@@ -2876,7 +3104,7 @@ function acceptBlank(idx) {
 }
 /** 빈칸 하나를 포기하고 정답 공개 — 오답으로 기록되고 다음 라운드에 다시 나온다 */
 function revealBlank(inp, idx) {
-  inp.value = inp.dataset.a;
+  inp.value = oneLine(inp.dataset.a);
   growBlank(inp);
   inp.disabled = true;
   inp.classList.remove('ng');
@@ -3038,7 +3266,7 @@ function giveUp() {
     bs.inputs.forEach(inp => {
       const idx = Number(inp.dataset.i);
       if (bs.locked.has(idx)) return;
-      inp.value = inp.dataset.a;
+      inp.value = oneLine(inp.dataset.a);
       growBlank(inp);
       inp.disabled = true;
       inp.classList.remove('ng');
@@ -3055,10 +3283,14 @@ function giveUp() {
     record(currentCardId, false);
   }
   feedback('warn', '정답 확인', '다음 라운드에 다시 출제됩니다.');
-  const code = $('answer-code');
-  try { code.innerHTML = window.hljs ? hljs.highlightAuto(card.term).value : esc(card.term); }
-  catch (e) { code.textContent = card.term; }
-  $('fb-answer').hidden = false;
+  if (isNb(card)) {
+    $('fb-answer').hidden = true;          // 정답은 노트북 안의 빈칸에 이미 채워져 있다
+  } else {
+    const code = $('answer-code');
+    try { code.innerHTML = window.hljs ? hljs.highlightAuto(card.term).value : esc(card.term); }
+    catch (e) { code.textContent = card.term; }
+    $('fb-answer').hidden = false;
+  }
   toNext();
   updateMeter();
   saveProgress();
@@ -3403,6 +3635,7 @@ const chipEl = $('float-chip');
 let editorBatchId = null;
 function openEditor() {
   editorBatchId = null;
+  showEditPane('plain');
   tempCards = allCards.map(c => ({ ...c, blanks: (c.blanks || []).map(b => ({ ...b })) }));
   editIndex = -1;
   editBlanks = [];
@@ -3440,7 +3673,7 @@ function renderCardList() {
   list.innerHTML = '';
   const rows = tempCards
     .map((c, i) => ({ c, i }))
-    .filter(({ c }) => !q || c.definition.toLowerCase().includes(q) || c.term.toLowerCase().includes(q));
+    .filter(({ c }) => !q || c.definition.toLowerCase().includes(q) || cardText(c).toLowerCase().includes(q));
   $('card-count').textContent = q ? `${rows.length}/${tempCards.length}` : String(tempCards.length);
   if (!rows.length) {
     const d = document.createElement('div');
@@ -3454,7 +3687,7 @@ function renderCardList() {
     row.className = 'card-item' + (hasBlanks(c) ? ' blank' : '') + (i === editIndex ? ' sel' : '');
     const tag = document.createElement('span');
     tag.className = 'tag';
-    tag.textContent = hasBlanks(c) ? `빈칸 ${c.blanks.length}` : '전체';
+    tag.textContent = isNb(c) ? (hasBlanks(c) ? `노트 · 빈칸 ${blankTotal(c)}` : '노트') : (hasBlanks(c) ? `빈칸 ${blankTotal(c)}` : '전체');
     const txt = document.createElement('span');
     txt.className = 'txt';
     txt.textContent = `${i + 1}. ${c.definition || '(설명 없음)'}`;
@@ -3477,6 +3710,8 @@ function loadCardIntoForm(i) {
   flushAutoSave();
   editIndex = i;
   const c = tempCards[i];
+  if (isNb(c)) { loadNbCard(c); renderCardList(); return; }
+  showEditPane('plain');
   $('edit-def').value = c.definition;
   termEl.value = c.term;
   lastTermValue = c.term;
@@ -3486,6 +3721,7 @@ function loadCardIntoForm(i) {
 }
 $('btn-new-card').addEventListener('click', () => {
   flushAutoSave();
+  showEditPane('plain');
   editIndex = -1;
   editBlanks = [];
   $('edit-def').value = '';
@@ -3690,8 +3926,162 @@ termEl.addEventListener('keydown', e => {
   }
 });
 
+/* ============================================================
+   노트북 카드 편집 — 셀을 노트북처럼 보여 주고, 드래그한 범위를 빈칸으로
+   ============================================================ */
+let editKind = 'plain';      // 'plain' | 'nb' — 지금 열린 편집 패널
+let editCells = [];          // 노트북 카드의 셀 사본 (빈칸만 바뀐다)
+let editLang = 'python';
+let nbSel = null;            // 드래그로 잡힌 범위 { ci, start, end }
+const nbeChip = $('nbe-chip');
+
+function showEditPane(kind) {
+  editKind = kind;
+  $('plain-pane').hidden = kind === 'nb';
+  $('nbe-pane').hidden = kind !== 'nb';
+  setNbSel(null);
+}
+
+function loadNbCard(card) {
+  showEditPane('nb');
+  editLang = card.lang || 'python';
+  editCells = (card.cells || []).map(c => ({ ...c, blanks: (c.blanks || []).map(b => ({ ...b })) }));
+  $('nbe-title').value = card.definition;
+  const host = $('nbe-cells');
+  host.innerHTML = '';
+  host.appendChild(nbvBuildView({ cells: editCells, lang: editLang }, { mode: 'edit' }));
+  editCells.forEach((_, ci) => renderNbeChips(ci));
+  $('nbe-pane').scrollTop = 0;
+}
+
+/** 셀 하나만 다시 그린다 (빈칸을 바꿀 때마다 전체를 다시 그리지 않도록) */
+function renderNbeCell(ci) {
+  const old = $('nbe-cells').querySelector(`.nbe-cell[data-ci="${ci}"]`);
+  if (!old) return;
+  old.replaceWith(nbvCellEl(editCells[ci], ci, nbvBaseOf(editCells, ci), editLang, { mode: 'edit' }));
+  renderNbeChips(ci);
+}
+
+function renderNbeChips(ci) {
+  const box = $('nbe-cells').querySelector(`.nbe-chips[data-ci="${ci}"]`);
+  if (!box) return;
+  box.innerHTML = '';
+  const cell = editCells[ci];
+  cell.blanks.forEach((b, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'blank-chip';
+    const t = document.createElement('span');
+    t.className = 't';
+    t.textContent = cell.source.slice(b.start, b.end).replace(/\s*\n\s*/g, ' ⏎ ');
+    const star = document.createElement('button');
+    star.type = 'button';
+    star.className = 'star' + (b.fav ? ' on' : '');
+    star.title = b.fav ? '즐겨찾기 해제' : '즐겨찾기에 추가';
+    star.innerHTML = `<svg viewBox="0 0 24 24" fill="${b.fav ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="${STAR_PATH}"/></svg>`;
+    star.addEventListener('click', ev => {
+      ev.stopPropagation();
+      const cur = editCells[ci].blanks[i];
+      if (!cur) return;
+      if (cur.fav) delete cur.fav; else cur.fav = true;
+      renderNbeCell(ci);
+      autoSave(true);
+    });
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.textContent = '×';
+    x.title = '이 빈칸 해제';
+    x.addEventListener('click', ev => {
+      ev.stopPropagation();
+      editCells[ci].blanks.splice(i, 1);
+      renderNbeCell(ci);
+      autoSave(true);
+    });
+    chip.append(t, star, x);
+    chip.addEventListener('click', () => {
+      const src = $('nbe-cells').querySelector(`.nbe-src[data-ci="${ci}"]`);
+      const cur = editCells[ci].blanks[i];
+      if (src && cur && nbvSelectRange(src, cur.start, cur.end)) src.scrollIntoView({ block: 'nearest' });
+    });
+    box.appendChild(chip);
+  });
+}
+
+/** 선택 범위를 상태로 두고 떠 있는 버튼을 위치시킨다 */
+function setNbSel(sel) {
+  nbSel = sel;
+  if (!sel || $('editor-modal').hidden) { nbeChip.hidden = true; return; }
+  positionNbeChip();
+}
+function positionNbeChip() {
+  const s = window.getSelection();
+  if (!nbSel || !s || !s.rangeCount) { nbeChip.hidden = true; return; }
+  const r = s.getRangeAt(0).getBoundingClientRect();
+  const pane = $('nbe-pane').getBoundingClientRect();
+  if (!r.width && !r.height) { nbeChip.hidden = true; return; }
+  if (r.bottom < pane.top || r.top > pane.bottom) { nbeChip.hidden = true; return; }   // 스크롤로 화면 밖
+  nbeChip.hidden = false;
+  nbeChip.style.left = clamp(r.left + r.width / 2, 70, innerWidth - 70) + 'px';
+  nbeChip.style.top = Math.max(pane.top + 40, r.top - 18) + 'px';   // 선택한 글자를 가리지 않게 한 줄 위
+}
+
+document.addEventListener('selectionchange', () => {
+  if ($('editor-modal').hidden || editKind !== 'nb') return;
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount || sel.isCollapsed) { setNbSel(null); return; }
+  const r = sel.getRangeAt(0);
+  const a = nbvSrcOf(r.startContainer), b = nbvSrcOf(r.endContainer);
+  if ((a && b && a !== b) || (!a && !b)) { setNbSel(null); return; }      // 셀 두 개에 걸치거나 셀 밖
+  const src = a || b;
+  const ci = Number(src.dataset.ci);
+  const text = editCells[ci] ? editCells[ci].source : '';
+  let start = a ? nbvOffsetIn(src, r.startContainer, r.startOffset) : 0;
+  let end = b ? nbvOffsetIn(src, r.endContainer, r.endOffset) : text.length;   // 셀 끝을 넘어 잡힌 경우(세 번 클릭 등)는 끝으로 맞춘다
+  while (start < end && /\s/.test(text[start])) start++;
+  while (end > start && /\s/.test(text[end - 1])) end--;
+  if (end <= start) { setNbSel(null); return; }
+  setNbSel({ ci, start, end });
+});
+$('nbe-pane').addEventListener('scroll', () => { if (nbSel) positionNbeChip(); });
+
+function makeNbBlank() {
+  if (!nbSel) return;
+  const { ci, start, end } = nbSel;
+  const cell = editCells[ci];
+  if (!cell) return;
+  cell.blanks = sanitizeBlanks([...cell.blanks, { start, end }], cell.source);
+  window.getSelection().removeAllRanges();
+  setNbSel(null);
+  renderNbeCell(ci);
+  autoSave(true);
+  toast('빈칸으로 지정했습니다', 'good');
+}
+nbeChip.addEventListener('mousedown', e => { e.preventDefault(); makeNbBlank(); });
+document.addEventListener('keydown', e => {
+  if ($('editor-modal').hidden || editKind !== 'nb') return;
+  if ((e.metaKey || e.ctrlKey) && (e.key === 'b' || e.key === 'B') && nbSel) { e.preventDefault(); makeNbBlank(); }
+});
+$('nbe-title').addEventListener('input', () => autoSave());
+
+function commitNb() {
+  const prev = tempCards[editIndex];
+  if (!prev || !isNb(prev)) return false;
+  const title = $('nbe-title').value.trim();
+  if (!title) { editorStatus('제목을 입력하면 저장됩니다'); return false; }
+  const sig = c => JSON.stringify(c.map(x => x.blanks || []));
+  if (prev.definition === title && sig(prev.cells) === sig(editCells)) { editorStatus('저장됨'); return true; }
+  tempCards[editIndex] = { ...prev, definition: title, cells: editCells.map(c => ({ ...c, blanks: c.blanks.map(b => ({ ...b })) })) };
+  allCards = tempCards.map(normalizeCard);
+  saveCards();
+  onCardsChanged();
+  updateFavUI();
+  renderCardList();
+  editorStatus('저장됨');
+  return true;
+}
+
 /** 편집 중인 카드를 저장. silent 면 아직 채워지지 않은 카드는 조용히 건너뛴다 */
 function commitCard({ silent = false } = {}) {
+  if (editKind === 'nb') return commitNb();
   const def = $('edit-def').value.trim();
   const term = termEl.value.replace(/\s+$/, '');
   if (!def || !term) {
@@ -3756,6 +4146,7 @@ $('btn-del-card').addEventListener('click', async () => {
   tempCards.splice(editIndex, 1);
   editIndex = -1;
   editBlanks = [];
+  showEditPane('plain');
   $('edit-def').value = '';
   termEl.value = '';
   lastTermValue = '';
@@ -3847,7 +4238,9 @@ $('btn-reset-stats').addEventListener('click', async () => {
    ============================================================ */
 $('btn-export').addEventListener('click', () => {
   if (!allCards.length) { toast('내보낼 카드가 없습니다', 'bad'); return; }
-  const payload = allCards.map(({ definition, term, blanks }) => ({ definition, term, blanks }));
+  const payload = allCards.map(c => isNb(c)
+    ? { kind: 'notebook', definition: c.definition, lang: c.lang, cells: c.cells }
+    : { definition: c.definition, term: c.term, blanks: c.blanks });
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -3907,13 +4300,13 @@ function renderImportList() {
     body.className = 'body';
     const t = document.createElement('div');
     t.className = 't';
-    t.textContent = `${i + 1}. ` + (c.blanks.length ? `빈칸 ${c.blanks.length}개` : '전체 코드');
+    t.textContent = `${i + 1}. ` + (isNb(c) ? `노트북 카드 · 셀 ${c.cells.length}개 · 빈칸 ${blankTotal(c)}개` : (blankTotal(c) ? `빈칸 ${blankTotal(c)}개` : '전체 코드'));
     const d = document.createElement('div');
     d.className = 'd';
     d.textContent = c.definition.replace(/\n+/g, ' ');
     const code = document.createElement('div');
     code.className = 'c';
-    code.innerHTML = markedCode(c.term, c.blanks);
+    code.innerHTML = isNb(c) ? nbSnippetHtml(c) : markedCode(c.term, c.blanks);
     body.append(t, d, code);
     row.append(cb, body);
     host.appendChild(row);
@@ -3923,7 +4316,7 @@ function renderImportList() {
 
 function updateImportStatus() {
   const n = importPicked.filter(Boolean).length;
-  const blanks = importCards.filter((_, i) => importPicked[i]).reduce((a, c) => a + c.blanks.length, 0);
+  const blanks = importCards.filter((_, i) => importPicked[i]).reduce((a, c) => a + blankTotal(c), 0);
   $('import-status').textContent = `${importCards.length}장 중 ${n}장 선택 · 빈칸 ${blanks}개`;
   $('import-submit').textContent = importMode === 'replace' ? `${n}장으로 대체` : `${n}장 추가`;
   $('import-submit').disabled = n === 0;
@@ -4039,7 +4432,7 @@ async function handleText(text, name) {
       return;
     }
     if (Array.isArray(data)) {                 // 카드 JSON
-      const cards = data.filter(c => c && c.definition && c.term).map(normalizeCard);
+      const cards = data.filter(c => c && c.definition && (c.term || (c.kind === 'notebook' && Array.isArray(c.cells) && c.cells.length))).map(normalizeCard);
       if (!cards.length) { toast('가져올 카드가 없습니다', 'bad'); return; }
       showImportPreview(cards, name);
       return;
@@ -4049,94 +4442,37 @@ async function handleText(text, name) {
 }
 
 /* ============================================================
-   15. .ipynb 파싱 — 마크다운 제목 기준 섹션 자동 분리
+   15. .ipynb 가져오기 — 마크다운·코드·출력이 보이는 뷰어 카드로
    ============================================================ */
-let nbItems = [];        // {sectionTitle, md, code}
-let nbCards = [];        // 미리보기용 카드
+let nbDoc = null;        // { lang, cells, fileName } — 파싱된 노트북 (출력 포함, 메모리에만)
+let nbCards = [];        // 옵션을 적용해 만든 카드
+let nbStats = [];        // 카드별 통계(미리보기용)
 let nbPicked = [];       // 선택 여부
-let nbOpts = { mode: 'section', blank: 'off', target: 'new' };
+let nbOpts = { mode: 'section', depth: '6', blank: 'off', outputs: 'all', target: 'new' };
 let nbFileName = '';
 
-const cellSource = c => Array.isArray(c.source) ? c.source.join('') : String(c.source || '');
+const fmtKB = n => n >= 1048576 ? (n / 1048576).toFixed(1) + 'MB' : Math.max(1, Math.round(n / 1024)) + 'KB';
 
-function mdToPlain(md) {
-  return md
-    .replace(/^```[\s\S]*?```$/gm, m => m.replace(/^```\w*\n?|```$/g, ''))
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/^\s{0,3}#{1,6}\s+/gm, '')
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/^\s*[-*+]\s+/gm, '· ')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
-function parseNotebook(nb) {
-  const cells = Array.isArray(nb.cells) ? nb.cells : [];
-  const items = [];
-  let section = '';
-  let mdBuf = [];
-  for (const cell of cells) {
-    const text = cellSource(cell);
-    if (cell.cell_type === 'markdown') {
-      const m = text.match(/^\s{0,3}(#{1,6})\s+(.+?)\s*$/m);
-      if (m) {
-        section = m[2].replace(/#+\s*$/, '').trim();
-        mdBuf = [];
-        const rest = text.slice(text.indexOf(m[0]) + m[0].length).trim();
-        if (rest) mdBuf.push(rest);
-      } else if (text.trim()) {
-        mdBuf.push(text.trim());
-      }
-    } else if (cell.cell_type === 'code') {
-      const code = text.replace(/\s+$/, '');
-      if (!code.trim()) continue;
-      items.push({ section, md: mdBuf.join('\n\n'), code });
-      mdBuf = [];
-    }
-  }
-  return items;
+/** 가져오기 목록의 짧은 미리보기 — 첫 코드 셀(없으면 첫 셀)의 앞부분과 빈칸 */
+function nbSnippetHtml(card) {
+  const cell = (card.cells || []).find(c => c.type === 'code') || (card.cells || [])[0];
+  return cell ? markedCode(cell.source, cell.blanks || []) : '';
 }
 
 function buildNbCards() {
-  const groups = [];
-  if (nbOpts.mode === 'section') {
-    let key = null, cur = null;
-    nbItems.forEach(it => {
-      if (cur === null || it.section !== key) {
-        key = it.section;
-        cur = { section: it.section, mds: [], codes: [] };
-        groups.push(cur);
-      }
-      if (it.md) cur.mds.push(it.md);
-      cur.codes.push(it.code);
-    });
-  } else {
-    nbItems.forEach(it => groups.push({ section: it.section, mds: it.md ? [it.md] : [], codes: [it.code] }));
-  }
-
-  nbCards = groups.map((g, i) => {
-    const term = g.codes.join('\n\n');
-    const desc = mdToPlain(g.mds.join('\n\n'));
-    const title = g.section || `섹션 ${i + 1}`;
-    const definition = desc ? `${title}\n\n${desc}` : title;
-    return {
-      id: genId('card'),
-      title,
-      definition: definition.slice(0, 1200),
-      term,
-      blanks: autoBlanks(term, nbOpts.blank),
-    };
-  }).filter(c => c.term.trim());
-  nbPicked = nbCards.map(() => true);
+  const groups = nbvGroup(nbDoc.cells, nbOpts.mode, Number(nbOpts.depth), nbDoc.fileName);
+  nbCards = groups.map(g => nbvMakeCard(g, nbDoc.lang, { blank: nbOpts.blank, outputs: nbOpts.outputs }));
+  nbStats = nbCards.map(nbvCardStats);
+  // 코드가 없는 텍스트 전용 섹션은 기본으로 빼 둔다 (원하면 체크)
+  nbPicked = nbCards.map(c => c.cells.some(x => x.type === 'code'));
+  if (!nbPicked.some(Boolean)) nbPicked = nbCards.map(() => true);
 }
 
 function renderNbList() {
   const host = $('nb-list');
   host.innerHTML = '';
   nbCards.forEach((c, i) => {
+    const st = nbStats[i];
     const row = document.createElement('div');
     row.className = 'nb-item' + (nbPicked[i] ? '' : ' off');
 
@@ -4154,13 +4490,13 @@ function renderNbList() {
     body.className = 'body';
     const t = document.createElement('div');
     t.className = 't';
-    t.textContent = c.title + (c.blanks.length ? ` · 빈칸 ${c.blanks.length}` : '');
+    t.textContent = c.definition;
     const d = document.createElement('div');
     d.className = 'd';
-    d.textContent = c.definition.replace(/\n+/g, ' ');
+    d.textContent = `마크다운 ${st.md} · 코드 ${st.code} · 출력 ${st.outs}` + (st.blanks ? ` · 빈칸 ${st.blanks}` : '') + (st.code ? '' : ' · 텍스트만') + ` · ${fmtKB(st.bytes)}`;
     const code = document.createElement('div');
     code.className = 'c';
-    code.innerHTML = markedCode(c.term, c.blanks);
+    code.innerHTML = nbSnippetHtml(c);
     body.append(t, d, code);
 
     row.append(cb, body);
@@ -4183,7 +4519,9 @@ function markedCode(term, blanks) {
 }
 function updateNbStatus() {
   const n = nbPicked.filter(Boolean).length;
-  $('nb-status').textContent = `${nbCards.length}개 섹션 감지 · ${n}개 선택됨`;
+  const bytes = nbStats.reduce((a, st, i) => a + (nbPicked[i] ? st.bytes : 0), 0);
+  $('nb-status').textContent = `${nbCards.length}개 카드 · ${n}개 선택 · 약 ${fmtKB(bytes)}`
+    + (bytes > 3 * 1048576 ? ' — 브라우저 저장 한도(약 5MB)에 가깝습니다. 출력을 줄여 보세요' : '');
   $('nb-import').textContent = `${n}개 카드 가져오기`;
   $('nb-import').disabled = n === 0;
 }
@@ -4194,24 +4532,29 @@ function resetNbModal() {
   $('nb-toggle-all').hidden = true;
   $('nb-status').textContent = '';
   $('nb-list').innerHTML = '';
-  nbItems = []; nbCards = []; nbPicked = [];
+  nbDoc = null; nbCards = []; nbStats = []; nbPicked = [];
 }
 
 function loadNotebook(nb, fileName) {
   nbFileName = (fileName || 'notebook').replace(/\.ipynb$/i, '');
-  nbItems = parseNotebook(nb);
-  if (!nbItems.length) {
-    toast('코드 셀을 찾지 못했습니다', 'bad');
+  let doc;
+  try { doc = nbvParseCells(nb); }
+  catch (e) { console.warn('notebook parse failed', e); toast('노트북을 읽는 중 문제가 생겼습니다', 'bad'); resetNbModal(); return; }
+  if (!doc.cells.length) {
+    toast('내용이 있는 셀을 찾지 못했습니다', 'bad');
     resetNbModal();
     return;
   }
+  nbDoc = { ...doc, fileName: nbFileName };
   buildNbCards();
   $('nb-result').hidden = false;
   $('nb-import').hidden = false;
   $('nb-toggle-all').hidden = false;
+  $('nb-toggle-all').textContent = '전체 선택 해제';
   $('nb-deck-name').value = nbFileName;
   renderNbList();
-  $('nb-sub').textContent = `${nbFileName}.ipynb · 코드 셀 ${nbItems.length}개`;
+  const md = doc.cells.filter(c => c.type === 'markdown').length;
+  $('nb-sub').textContent = `${nbFileName}.ipynb · 셀 ${doc.cells.length}개 (마크다운 ${md} · 코드 ${doc.cells.length - md})`;
 }
 
 $('nb-drop').addEventListener('click', () => { $('file-input').accept = '.ipynb'; $('file-input').click(); });
@@ -4243,8 +4586,11 @@ function bindSeg(id, key, after) {
     });
   });
 }
-bindSeg('nb-mode', 'mode', () => { buildNbCards(); renderNbList(); });
-bindSeg('nb-blank', 'blank', () => { buildNbCards(); renderNbList(); });
+const rebuildNb = () => { if (nbDoc) { buildNbCards(); renderNbList(); } };
+bindSeg('nb-mode', 'mode', () => { $('nb-depth-wrap').style.display = nbOpts.mode === 'section' ? '' : 'none'; rebuildNb(); });
+bindSeg('nb-depth', 'depth', rebuildNb);
+bindSeg('nb-outputs', 'outputs', rebuildNb);
+bindSeg('nb-blank', 'blank', rebuildNb);
 bindSeg('nb-target', 'target', () => { $('nb-name-wrap').style.display = nbOpts.target === 'new' ? '' : 'none'; });
 
 $('nb-toggle-all').addEventListener('click', () => {
@@ -4257,27 +4603,35 @@ $('nb-toggle-all').addEventListener('click', () => {
 $('nb-import').addEventListener('click', async () => {
   const picked = nbCards.filter((_, i) => nbPicked[i]);
   if (!picked.length) return;
-  const cards = picked.map(c => normalizeCard({ id: genId('card'), definition: c.definition, term: c.term, blanks: c.blanks }));
-  // 새 덱이면 덱을 먼저 만들어야 묶음이 그 덱에 등록된다 — 아래 분기에서 각각 처리
+  const cards = picked.map(normalizeCard);
 
   if (nbOpts.target === 'new') {
     const name = ($('nb-deck-name').value || '').trim() || nbFileName;
     const id = genId('deck');
+    const batchId = genId('batch');
+    // 용량을 먼저 확인한다 — 저장에 실패하면 덱을 만들지 않는다
+    if (!lsSet(cardsKey(id), JSON.stringify(cards.map(c => ({ ...c, batchId }))))) return;
     deckList.push({ id, name, subtitle: `노트북에서 가져옴 · ${cards.length}장`, createdAt: Date.now() });
     persistDecks();
     activeDeckId = id;
     localStorage.setItem(ACTIVE_KEY, id);
-    batches = [];
-    const batchId = registerBatch(nbFileName);
-    localStorage.setItem(cardsKey(id), JSON.stringify(cards.map(c => ({ ...c, batchId }))));
+    batches = [{ id: batchId, at: Date.now(), label: nbFileName }];
+    saveBatches();
     currentCardId = null; activeQueue = []; nextRoundMap.clear(); prevWrongMap.clear();
     $('nb-modal').hidden = true;
     await boot(true);
     toast(`"${name}" 덱에 ${cards.length}장을 만들었습니다`, 'good');
   } else {
     const batchId = registerBatch(nbFileName);
-    allCards = allCards.concat(cards.map(c => ({ ...c, batchId })));
-    saveCards();
+    const prev = allCards;
+    allCards = prev.concat(cards.map(c => ({ ...c, batchId })));
+    if (!saveCards()) {                    // 저장 공간 부족 — 원래대로 되돌린다
+      allCards = prev;
+      cardMap = new Map(prev.map(c => [c.id, c]));
+      batches = batches.filter(b => b.id !== batchId);
+      saveBatches();
+      return;
+    }
     onCardsChanged();
     $('nb-modal').hidden = true;
     toast(`현재 덱에 ${cards.length}장을 추가했습니다`, 'good');
