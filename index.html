@@ -578,7 +578,7 @@ textarea.code-surface::placeholder { color: #5a6070; }
 .nbe-chips:empty { display: none; }
 .nbe-outs { margin-top: 8px; }
 .nbe-outs summary { cursor: pointer; font-size: 11.5px; color: var(--ink-3); padding: 2px 0; }
-.nbe-chip { position: fixed; z-index: 90; }
+.nbe-chip { position: fixed; z-index: 90; user-select: none; -webkit-user-select: none; }
 .nbe-chip[hidden] { display: none; }
 
 #inline-hint { font-size: 12px; min-height: 1.5em; margin-top: 8px; font-weight: 600; }
@@ -773,7 +773,12 @@ pre.answer-code {
   background: var(--accent); color: #fff;
   font-size: 12px; font-weight: 700; white-space: nowrap;
   box-shadow: 0 12px 26px -10px rgba(0,0,0,.6);
-  animation: pop .16s ease both; transform: translate(-50%, -100%);
+  animation: chip-pop .18s cubic-bezier(.2, .9, .3, 1.2) both; transform: translate(-50%, -100%);
+}
+/* pop 은 transform 을 none 으로 덮어써서 칩이 선택한 글자 위에 겹쳤다 — 위치 이동을 유지하는 전용 애니메이션 */
+@keyframes chip-pop {
+  from { opacity: 0; transform: translate(-50%, calc(-100% + 6px)) scale(.96); }
+  to { opacity: 1; transform: translate(-50%, -100%); }
 }
 .float-chip[hidden] { display: none; }
 .float-chip .kbd { background: rgba(255,255,255,.22); }
@@ -3956,7 +3961,7 @@ function positionChip() {
   const y = r.top - host.top - 6;
   chipEl.hidden = false;
   chipEl.style.left = clamp(x, 60, host.width - 60) + 'px';
-  chipEl.style.top = Math.max(30, y) + 'px';
+  chipEl.style.top = y + 'px';   // 첫 줄이면 편집기 위 칸으로 살짝 올라간다 — 선택한 글자를 가리지 않는 쪽이 낫다
 }
 
 function makeBlankFromSelection() {
@@ -4135,16 +4140,18 @@ function setNbSel(sel) {
   if (!sel || $('editor-modal').hidden) { nbeChip.hidden = true; return; }
   positionNbeChip();
 }
+let nbDragging = false;       // 마우스로 드래그하는 동안에는 칩을 띄우지 않는다
 function positionNbeChip() {
   const s = window.getSelection();
-  if (!nbSel || !s || !s.rangeCount) { nbeChip.hidden = true; return; }
+  // 드래그 중에 칩이 커서 밑에 뜨면 선택 끝이 칩으로 튀어서 범위가 뒤로 늘어나고 칩이 깜빡인다
+  if (!nbSel || nbDragging || !s || !s.rangeCount) { nbeChip.hidden = true; return; }
   const r = s.getRangeAt(0).getBoundingClientRect();
   const pane = $('nbe-pane').getBoundingClientRect();
   if (!r.width && !r.height) { nbeChip.hidden = true; return; }
   if (r.bottom < pane.top || r.top > pane.bottom) { nbeChip.hidden = true; return; }   // 스크롤로 화면 밖
-  nbeChip.hidden = false;
+  if (nbeChip.hidden) nbeChip.hidden = false;   // 이미 떠 있으면 등장 애니메이션을 다시 돌리지 않는다
   nbeChip.style.left = clamp(r.left + r.width / 2, 70, innerWidth - 70) + 'px';
-  nbeChip.style.top = Math.max(pane.top + 40, r.top - 18) + 'px';   // 선택한 글자를 가리지 않게 한 줄 위
+  nbeChip.style.top = Math.max(pane.top + 40, r.top - 8) + 'px';   // 칩의 아래쪽 끝이 선택 영역 바로 위에 오도록
 }
 
 document.addEventListener('selectionchange', () => {
@@ -4152,6 +4159,7 @@ document.addEventListener('selectionchange', () => {
   const sel = window.getSelection();
   if (!sel || !sel.rangeCount || sel.isCollapsed) { setNbSel(null); return; }
   const r = sel.getRangeAt(0);
+  if (nbeChip.contains(r.startContainer) || nbeChip.contains(r.endContainer)) return;
   const a = nbvSrcOf(r.startContainer), b = nbvSrcOf(r.endContainer);
   if ((a && b && a !== b) || (!a && !b)) { setNbSel(null); return; }      // 셀·출력 두 군데에 걸치거나 밖
   const src = a || b;
@@ -4168,6 +4176,16 @@ document.addEventListener('selectionchange', () => {
   setNbSel({ ci, oi, start, end });
 });
 $('nbe-pane').addEventListener('scroll', () => { if (nbSel) positionNbeChip(); });
+$('nbe-cells').addEventListener('pointerdown', e => {
+  if (e.button !== 0 || e.target.closest('button, textarea, input, .blank-chip')) return;
+  nbDragging = true;
+  nbeChip.hidden = true;
+});
+["pointerup", "pointercancel"].forEach(t => document.addEventListener(t, () => {
+  if (!nbDragging) return;
+  nbDragging = false;
+  if (nbSel) positionNbeChip();   // 손을 뗀 뒤에 한 번만 띄운다
+}));
 
 function makeNbBlank() {
   if (!nbSel) return;
