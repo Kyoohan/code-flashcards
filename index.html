@@ -822,6 +822,20 @@ pre.answer-code {
 .stat-row-head .v { flex: 0 0 auto; font-weight: 700; font-variant-numeric: tabular-nums; }
 .mini-bar { height: 4px; border-radius: 99px; background: var(--sunken); overflow: hidden; }
 .mini-bar > i { display: block; height: 100%; border-radius: 99px; }
+.stats-deck { width: 100%; margin-bottom: 16px; }
+.stat-blank { animation: stat-in .42s cubic-bezier(.2, .9, .3, 1.1) both; animation-delay: calc(var(--k, 0) * 28ms); }
+@keyframes stat-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.stat-blank .stat-row-head { align-items: flex-start; }
+.stat-blank-main { display: grid; gap: 3px; min-width: 0; }
+.stat-ans {
+  justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 2px 8px; border-radius: 6px; background: var(--accent-soft); color: var(--accent-ink);
+  font: 500 12.5px/1.5 'JetBrains Mono', ui-monospace, monospace;
+}
+.stat-where { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--ink-4); }
+.stat-blank .v small { font-size: 11px; font-weight: 500; color: var(--ink-4); }
+.stat-more { display: block; margin: 12px auto 0; }
+@media (prefers-reduced-motion: reduce) { .stat-blank { animation: none; } }
 
 /* 노트북 가져오기 */
 .drop-zone {
@@ -1520,6 +1534,24 @@ function nbFlat(card) {
   return out;
 }
 const allBlanks = card => isNb(card) ? nbFlat(card).map(x => x.b) : (card.blanks || []);
+/** 카드의 빈칸 정답과 위치 (전역 번호 순 — nbFlat 과 같은 순서) */
+function blankAnswers(card) {
+  if (!isNb(card)) return (card.blanks || []).map(b => ({ answer: (card.term || '').slice(b.start, b.end), ci: -1 }));
+  const out = [];
+  (card.cells || []).forEach((cell, ci) => {
+    (cell.blanks || []).forEach(b => out.push({ answer: (cell.source || '').slice(b.start, b.end), ci }));
+    (cell.outputs || []).forEach(o => {
+      const t = nbvOutText(o) || '';
+      (o.blanks || []).forEach(b => out.push({ answer: t.slice(b.start, b.end), ci, out: true }));
+    });
+  });
+  return out;
+}
+/** 빈칸 통계 키. 번호는 빈칸을 추가·삭제하면 밀리므로 정답 글자 + 같은 글자 중 몇 번째인지로 묶는다 */
+function blankKeys(card) {
+  const seen = new Map();
+  return blankAnswers(card).map(({ answer }) => { const n = seen.get(answer) || 0; seen.set(answer, n + 1); return answer + '\u0000' + n; });
+}
 const cardText = card => isNb(card) ? (card.cells || []).map(c => c.source).join('\n') : (card.term || '');
 const favIndices = card => new Set(allBlanks(card).map((b, i) => b.fav ? i : -1).filter(i => i >= 0));
 const favCount = card => allBlanks(card).filter(b => b.fav).length;
@@ -2610,6 +2642,33 @@ function recordOverride(id) {
   st.correct++;
   saveStats();
 }
+/**
+ * 빈칸 하나가 한 번 출제되어 끝났을 때 기록한다 (idx '*' = 빈칸 없는 카드의 전체 코드).
+ * 처음 입력에 맞히면 정답, 한 번이라도 틀렸거나 포기했으면 오답 — 오답률 = 틀린 출제 / 출제 수.
+ */
+function recordBlank(id, idx, ok) {
+  const card = id && cardMap.get(id);
+  if (!card) return;
+  const key = idx === '*' ? '*' : blankKeys(card)[idx];
+  if (key == null) return;
+  const s = statsMap.get(id) || { attempts: 0, correct: 0, wrong: 0 };
+  const b = s.b || (s.b = {});
+  const v = b[key] || (b[key] = [0, 0]);
+  v[0]++;
+  if (!ok) v[1]++;
+  statsMap.set(id, s);
+  saveStats();
+}
+/** 오답으로 기록된 출제를 정답으로 정정 ('정답으로 인정') */
+function overrideBlank(id, idx) {
+  const card = id && cardMap.get(id);
+  const s = statsMap.get(id);
+  if (!card || !s || !s.b) return;
+  const v = s.b[idx === '*' ? '*' : blankKeys(card)[idx]];
+  if (!v) return;
+  v[1] = Math.max(0, v[1] - 1);
+  saveStats();
+}
 function record(id, ok) {
   if (!id) return;
   const s = statsMap.get(id) || { attempts: 0, correct: 0, wrong: 0 };
@@ -3079,6 +3138,7 @@ function onBlankKey(e) {
     inp.disabled = true;
     bs.locked.add(idx);
     record(currentCardId, true);
+    recordBlank(currentCardId, idx, !bs.wrong.has(idx));
     hint('ok', '정답');
     updateBlankBadge();
     const nxt = bs.inputs.find(i => !i.disabled);
@@ -3122,6 +3182,7 @@ function acceptBlank(idx) {
   if (!inp || bs.locked.has(idx)) return;
   bs.wrong.delete(idx);
   recordOverride(currentCardId);
+  recordBlank(currentCardId, idx, true);
   inp.classList.remove('ng');
   inp.classList.add('ok');
   inp.disabled = true;
@@ -3155,6 +3216,7 @@ function revealBlank(inp, idx) {
   $('badge-retry').hidden = false;
   nextRoundMap.set(currentCardId, new Set(bs.wrong));
   record(currentCardId, false);
+  recordBlank(currentCardId, idx, false);
   hint('ng', '정답을 공개했습니다 — 다음 라운드에 다시 나옵니다');
   updateBlankBadge();
   updateMeter();
@@ -3224,7 +3286,7 @@ function acceptFullCorrect(ta) {
 /** 빈칸 카드가 '일부 오답'으로 끝난 뒤 인정 → 틀렸던 칸 전부 정답 처리, 바로 다음 문제 */
 function acceptBlankCard() {
   if (!bs.wrong.size) return;
-  bs.wrong.forEach(() => recordOverride(currentCardId));
+  bs.wrong.forEach(idx => { recordOverride(currentCardId); overrideBlank(currentCardId, idx); });
   bs.inputs.forEach(inp => {
     const idx = Number(inp.dataset.i);
     if (bs.wrong.has(idx)) { inp.classList.remove('ng', 'revealed'); inp.classList.add('ok'); }
@@ -3245,6 +3307,7 @@ function acceptFull() {
   if (!fullAttempt) return;
   fullAttempt = null;
   recordOverride(currentCardId);
+  recordBlank(currentCardId, '*', true);
   // 인정은 "이 카드는 맞았다"는 판단이므로, 같은 방문에서 먼저 틀렸던 기록까지 포함해
   // 오답 상태를 통째로 지운다. 그대로 두면 다음 라운드에 다시 나와 오답 처리된 것처럼 보인다.
   isRetryMode = false;
@@ -3267,6 +3330,7 @@ function checkFull() {
   if (normalize(ta.value) === normalize(card.term)) {
     fullAttempt = null;
     record(currentCardId, true);
+    recordBlank(currentCardId, '*', lastFullWrong === null);
     acceptFullCorrect(ta);
   } else {
     // 인정 버튼으로 되돌릴 수 있도록 이 시도 이전의 상태를 기억한다
@@ -3316,12 +3380,14 @@ function giveUp() {
       bs.wrong.add(idx);
       bs.revealed.add(idx);
       record(currentCardId, false);
+      recordBlank(currentCardId, idx, false);
     });
     if (bs.wrong.size) nextRoundMap.set(currentCardId, new Set(bs.wrong));
   } else {
     $('answer-input').disabled = true;
     nextRoundMap.set(currentCardId, 'all');
     record(currentCardId, false);
+    recordBlank(currentCardId, '*', false);
   }
   feedback('warn', '정답 확인', '다음 라운드에 다시 출제됩니다.');
   if (isNb(card)) {
@@ -4430,26 +4496,73 @@ $('btn-del-card').addEventListener('click', async () => {
 /* ============================================================
    13. 통계
    ============================================================ */
+let statsDeckId = null;          // 통계 창에서 보고 있는 덱 (기본은 지금 학습 중인 덱)
+let statsShowAll = false;
 $('btn-stats').addEventListener('click', () => {
+  statsDeckId = activeDeckId;
+  statsShowAll = false;
   renderStats();
   $('stats-modal').hidden = false;
 });
+/** 덱 하나의 카드와 통계 — 학습 중인 덱은 메모리에서, 나머지는 저장소에서 읽는다 */
+function statsSource(id) {
+  if (id === activeDeckId) return { cards: allCards, stats: statsMap };
+  return {
+    cards: safeParse(localStorage.getItem(cardsKey(id)), []).filter(c => c && typeof c === 'object'),
+    stats: new Map(safeParse(localStorage.getItem(statsKey(id)), [])),
+  };
+}
+/** 기록이 있는 빈칸 목록 — 오답률 높은 순 */
+function weakBlanks(cards, stats) {
+  const items = [];
+  cards.forEach(card => {
+    const st = stats.get(card.id);
+    if (!st || !st.b) return;
+    if (hasBlanks(card)) {
+      const keys = blankKeys(card);
+      blankAnswers(card).forEach((info, i) => {
+        const v = st.b[keys[i]];
+        if (v && v[0] > 0) items.push({ card, idx: i, answer: info.answer, ci: info.ci, out: info.out, n: v[0], w: v[1] });
+      });
+    } else if (st.b['*'] && st.b['*'][0] > 0) {
+      const v = st.b['*'];
+      items.push({ card, idx: -1, answer: card.term || '', ci: -1, whole: true, n: v[0], w: v[1] });
+    }
+  });
+  // 오답률 → 틀린 횟수 → 출제 횟수 순: 1번 중 1번 틀린 칸보다 5번 중 5번 틀린 칸이 위로
+  return items.sort((x, y) => (y.w / y.n - x.w / x.n) || (y.w - x.w) || (y.n - x.n));
+}
 function renderStats() {
   const body = $('stats-body');
   body.innerHTML = '';
-  let att = 0, cor = 0;
-  const rows = allCards.map(c => {
-    const s = statsMap.get(c.id) || { attempts: 0, correct: 0, wrong: 0 };
-    att += s.attempts; cor += s.correct;
-    return { c, s, rate: s.attempts ? s.correct / s.attempts : null };
+  if (!deckList.some(d => d.id === statsDeckId)) statsDeckId = activeDeckId;
+  const { cards, stats } = statsSource(statsDeckId);
+
+  // 덱 고르기
+  const pick = document.createElement('select');
+  pick.className = 'select stats-deck';
+  pick.setAttribute('aria-label', '통계를 볼 덱');
+  deckList.forEach(d => {
+    const o = document.createElement('option');
+    o.value = d.id;
+    o.textContent = d.name + (d.id === activeDeckId ? ' (학습 중)' : '');
+    pick.appendChild(o);
   });
+  pick.value = statsDeckId;
+  pick.addEventListener('change', () => { statsDeckId = pick.value; statsShowAll = false; renderStats(); });
+  body.appendChild(pick);
+
+  let att = 0, cor = 0;
+  cards.forEach(c => { const st = stats.get(c.id); if (st) { att += st.attempts || 0; cor += st.correct || 0; } });
   const pct = att ? Math.round(cor / att * 100) : 0;
+  const items = weakBlanks(cards, stats);
+  const total = cards.reduce((n, c) => n + (hasBlanks(c) ? blankTotal(c) : 1), 0);
 
   const hero = document.createElement('div');
   hero.className = 'stat-hero';
-  const b = document.createElement('b'); b.textContent = pct + '%';
-  const sp = document.createElement('span'); sp.textContent = `전체 정답률 · 총 ${att}회 시도 · 카드 ${allCards.length}장`;
-  hero.append(b, sp);
+  const bEl = document.createElement('b'); bEl.textContent = pct + '%';
+  const sp = document.createElement('span'); sp.textContent = `전체 정답률 · 총 ${att}회 입력 · 빈칸 ${total}개 중 ${items.length}개 기록`;
+  hero.append(bEl, sp);
   const bar = document.createElement('div');
   bar.className = 'bar';
   bar.innerHTML = `<i style="width:${pct}%"></i>`;
@@ -4458,45 +4571,77 @@ function renderStats() {
   const title = document.createElement('div');
   title.className = 'ctl-label';
   title.style.margin = '22px 0 4px';
-  title.textContent = '더 연습이 필요한 카드';
+  title.textContent = '오답률이 높은 빈칸';
   body.appendChild(title);
 
-  const weak = rows.filter(r => r.s.attempts > 0).sort((a, b2) => (a.rate - b2.rate) || (b2.s.wrong - a.s.wrong)).slice(0, 10);
-  if (!weak.length) {
+  if (!items.length) {
     const e = document.createElement('div');
     e.className = 'list-empty';
-    e.textContent = '아직 시도 기록이 없습니다';
+    e.textContent = att ? '빈칸별 기록이 아직 없습니다 — 이제부터 푸는 빈칸마다 쌓입니다' : '아직 시도 기록이 없습니다';
     body.appendChild(e);
     return;
   }
-  weak.forEach(({ c, s, rate }) => {
-    const p = Math.round(rate * 100);
+  const LIMIT = 30;
+  const shown = statsShowAll ? items : items.slice(0, LIMIT);
+  const list = document.createElement('div');
+  list.className = 'stat-list';
+  shown.forEach((it, k) => {
+    const p = Math.round(it.w / it.n * 100);
+    const color = p >= 50 ? 'var(--bad)' : p > 0 ? 'var(--warn)' : 'var(--good)';
     const row = document.createElement('div');
-    row.className = 'stat-row';
+    row.className = 'stat-row stat-blank';
+    row.style.setProperty('--k', Math.min(k, 12));
     const head = document.createElement('div');
     head.className = 'stat-row-head';
-    const n = document.createElement('span');
-    n.className = 'n';
-    n.textContent = c.definition || '(설명 없음)';
+    const left = document.createElement('div');
+    left.className = 'stat-blank-main';
+    const ans = document.createElement('code');
+    ans.className = 'stat-ans';
+    ans.textContent = it.whole ? oneLine(it.answer).slice(0, 80) : oneLine(it.answer);
+    ans.title = it.answer;
+    const where = document.createElement('span');
+    where.className = 'stat-where';
+    const loc = it.whole ? '전체 코드' : isNb(it.card) ? `셀 ${it.ci + 1}${it.out ? ' 출력' : ''}` : `빈칸 ${it.idx + 1}`;
+    where.textContent = `${it.card.definition || '(설명 없음)'} · ${loc}`;
+    left.append(ans, where);
     const v = document.createElement('span');
     v.className = 'v';
-    v.style.color = p < 50 ? 'var(--bad)' : p < 80 ? 'var(--warn)' : 'var(--good)';
-    v.textContent = `${p}% (${s.correct}/${s.attempts})`;
-    head.append(n, v);
+    v.style.color = color;
+    v.textContent = `${p}%`;
+    const cnt = document.createElement('small');
+    cnt.textContent = ` ${it.w}/${it.n}회 오답`;
+    v.appendChild(cnt);
+    head.append(left, v);
     const mb = document.createElement('div');
     mb.className = 'mini-bar';
     const fill = document.createElement('i');
-    fill.style.width = p + '%';
-    fill.style.background = p < 50 ? 'var(--bad)' : p < 80 ? 'var(--warn)' : 'var(--good)';
+    fill.style.width = Math.max(p, 2) + '%';
+    fill.style.background = color;
     mb.appendChild(fill);
     row.append(head, mb);
-    body.appendChild(row);
+    list.appendChild(row);
   });
+  body.appendChild(list);
+  if (items.length > shown.length) {
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'btn btn-quiet btn-sm stat-more';
+    more.textContent = `나머지 ${items.length - shown.length}개 더 보기`;
+    more.addEventListener('click', () => { statsShowAll = true; renderStats(); });
+    body.appendChild(more);
+  }
 }
 $('btn-reset-stats').addEventListener('click', async () => {
-  if (!await confirmBox('통계 초기화', '이 덱의 정답률 기록을 모두 지웁니다.', '초기화')) return;
-  statsMap = new Map();
-  saveStats();
+  const d = deckList.find(x => x.id === statsDeckId) || activeDeck();
+  if (!d) return;
+  if (!await confirmBox('통계 초기화', `"${d.name}" 덱의 정답률·빈칸 오답 기록을 모두 지웁니다.`, '초기화')) return;
+  if (d.id === activeDeckId) {
+    statsMap = new Map();
+    saveStats();
+  } else {
+    localStorage.setItem(statsKey(d.id), '[]');
+    gist.schedule();
+  }
   renderStats();
   toast('통계를 초기화했습니다');
 });
