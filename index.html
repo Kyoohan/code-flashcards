@@ -595,20 +595,17 @@ textarea.code-surface::placeholder { color: #5a6070; }
 #inline-hint { font-size: 12px; min-height: 1.5em; margin-top: 8px; font-weight: 600; }
 #inline-hint.ok { color: var(--good); }
 #inline-hint.ng { color: var(--bad); }
-.hint-diff-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; color: var(--ink-3); font-weight: 600; min-width: 0; }
+.hint-diff-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; align-items: baseline; margin-bottom: 6px; }
+.hint-diff-label { color: var(--ink-3); font-weight: 600; font-size: 11.5px; }
+.hint-diff-grid .hint-diff { justify-self: start; max-width: 100%; }
 .hint-diff {
-  min-width: 0; overflow-x: auto; white-space: pre; padding: 3px 8px; border-radius: 6px;
+  min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; padding: 3px 8px; border-radius: 6px;
   background: var(--code-bg); color: var(--code-ink); font: 500 12.5px/1.6 'JetBrains Mono', ui-monospace, monospace;
   font-variant-ligatures: none;
 }
 .hint-diff .hd-del { background: rgba(255, 112, 112, .28); color: #ffb3b3; text-decoration: line-through; text-decoration-color: rgba(255, 179, 179, .7); border-radius: 3px; }
 .hint-diff .hd-add { background: rgba(69, 214, 163, .26); color: #9df0cd; border-radius: 3px; }
-/* 빠진 자리: 글자 사이에 끼운 빨간 세로 막대 */
-.hint-diff .hd-miss {
-  display: inline-block; width: 2px; height: 1.15em; margin: 0 2px; vertical-align: -0.2em;
-  background: #ff7070; border-radius: 1px; box-shadow: 0 0 0 2px rgba(255, 112, 112, .25);
-  color: transparent; overflow: hidden;
-}
+
 
 .spacer { flex: 1; min-height: 16px; }
 
@@ -3219,30 +3216,52 @@ const oneLine = s => String(s).replace(/\s*\n\s*/g, ' ');
  * 그러면 첫 번째로 채점이 끝나 '다음 문제' 로 포커스가 옮겨 간 뒤, 두 번째가 그대로
  * 다음 문제로 넘겨버린다. 그래서 처리한 Enter 는 손을 뗄 때까지 다시 받지 않는다.
  */
-let enterLatch = 0;
-addEventListener('keyup', e => { if (e.key === 'Enter') enterLatch = 0; }, true);
-addEventListener('blur', () => { enterLatch = 0; });
+let enterLatch = 0;           // 마지막으로 처리한 Enter 시각
+let enterHeld = false;
+addEventListener('keyup', e => { if (e.key === 'Enter') enterHeld = false; }, true);
+addEventListener('blur', () => { enterHeld = false; });
 function takeEnter(e) {
-  // keyup 을 놓치는 경우(창 전환 등)에 대비해 1초가 지나면 새 Enter 로 본다
-  if (e.repeat || (enterLatch && performance.now() - enterLatch < 1000)) { e.preventDefault(); return false; }
-  enterLatch = performance.now();
+  const now = performance.now();
+  // ① 길게 눌러 생긴 반복 ② 손을 떼기 전의 재전송 ③ 손을 뗀 직후의 재전송(입력기가 keyup 뒤에 한 번 더 보냄)
+  if (e.repeat || now - enterLatch < 250 || (enterHeld && now - enterLatch < 1000)) { e.preventDefault(); return false; }
+  enterLatch = now;
+  enterHeld = true;
   return true;
 }
 
+let lastJudgeAt = 0;          // 빈칸 하나를 마지막으로 판정한 시각
 function onBlankKey(e) {
-  if (e.key !== 'Enter') return;
-  e.preventDefault();
+  const composing = e.isComposing || e.keyCode === 229;
+  if (e.key !== 'Enter' && !(composing && e.code === 'Enter')) return;
   // 마지막 빈칸을 맞히면 finishBlankCard() 가 동기적으로 '다음 문제' 버튼을 띄우고 포커스를 옮긴다.
   // 이 keydown 이 document 까지 올라가면 같은 Enter 한 번이 다음 카드로도 넘겨버리므로 전파를 끊는다.
   e.stopPropagation();
+  const inp = e.target, shift = e.shiftKey;
+  if (composing) {
+    // 한글 조합 중 Enter: 입력기가 글자를 확정한 뒤(값이 정해진 뒤) 한 번만 채점한다.
+    // 이어서 들어오는 '진짜' Enter keydown 은 takeEnter 의 시간 창에 걸려 버려진다.
+    enterLatch = performance.now();
+    let done = false;
+    const go = () => { if (done) return; done = true; enterLatch = performance.now(); submitBlank(inp, shift); };
+    inp.addEventListener('compositionend', () => setTimeout(go, 0), { once: true });
+    setTimeout(go, 300);        // 조합이 이미 끝나 compositionend 가 안 오는 경우
+    return;
+  }
+  e.preventDefault();
   if (!takeEnter(e)) return;
-
-  const inp = e.target;
+  submitBlank(inp, shift);
+}
+function submitBlank(inp, shift) {
   const idx = Number(inp.dataset.i);
-  if (bs.locked.has(idx)) return;
+  if (inp.disabled || bs.locked.has(idx) || !bs.inputs.includes(inp)) return;
+  // 판정 직후 0.4초 안에 들어온 Enter 는 같은 누름의 중복으로 본다. 어떤 경로로 들어왔든,
+  // 이게 없으면 '같은 오답 다시 Enter = 정답 공개'나 '빈 칸 Enter = 포기'로 잘못 처리되어 아래로 넘어간다.
+  const now = performance.now();
+  if (now - lastJudgeAt < 400) return;
+  lastJudgeAt = now;
 
   // ⇧Enter = 정답으로 인정: 지금 칸이 오답 판정 상태면 그 답을, 아니면 방금 공개된 칸의 내 답을
-  if (e.shiftKey) {
+  if (shift) {
     if (inp.classList.contains('ng') && bs.lastWrong.has(idx)) { acceptBlank(idx); return; }
     if (bs.lastReveal) { acceptRevealed(); return; }
   }
@@ -3290,59 +3309,44 @@ function onBlankKey(e) {
 
 /** 오답 안내 + "정답으로 인정" 버튼 */
 /**
- * 내 답의 어디가 틀렸는지 표시한다. 채점처럼 공백과 따옴표 종류(" ')는 차이로 치지 않는다.
- * reveal=false: 정답을 들키지 않도록 내 답에서 틀린 글자(빨강)와 빠진 자리(‸)만 보여 준다.
- * reveal=true : 정답을 이미 봤으므로 빠진 글자(초록)까지 보여 준다.
+ * 최종 판정 때 보여 주는 비교 (Quizlet 의 '내 답 / 정답' 화면처럼 두 줄).
+ * 내 답 줄에는 틀린 글자를 빨강으로, 정답 줄에는 내가 놓친 글자를 초록으로 칠한다.
+ * 채점처럼 공백과 따옴표 종류(" ')는 차이로 치지 않는다.
  */
-function blankDiffEl(typed, answer, reveal) {
-  const box = document.createElement('code');
-  box.className = 'hint-diff';
+function diffRowsEl(typed, answer) {
   const a = oneLine(answer), t = oneLine(typed);
-  if (!window.Diff) { box.textContent = t; return box; }
-  const q = s => s.replace(/"/g, "'");
-  const parts = Diff.diffChars(q(t), q(a));
-  let ti = 0, ai = 0;
-  const add = (cls, txt) => {
+  const mine = document.createElement('code'), right = document.createElement('code');
+  mine.className = right.className = 'hint-diff';
+  const put = (box, cls, txt) => {
+    if (!cls) { box.appendChild(document.createTextNode(txt)); return; }
     const sp = document.createElement('span');
     sp.className = cls;
     sp.textContent = txt;
     box.appendChild(sp);
   };
-  parts.forEach((p, k) => {
-    const n = p.value.length;
-    if (p.added) {
-      const txt = a.slice(ai, ai + n); ai += n;
-      if (!txt.trim()) return;                          // 공백만 다른 건 틀린 게 아니다
-      if (reveal) add('hd-add', txt);
-      else {
-        // 바로 옆이 틀린 글자면 그 표시로 충분하다 — 빠진 자리 표시는 따로 끼울 때만
-        const near = (parts[k - 1] && parts[k - 1].removed && parts[k - 1].value.trim()) || (parts[k + 1] && parts[k + 1].removed && parts[k + 1].value.trim());
-        if (!near) add('hd-miss', '‸');
-      }
-    } else if (p.removed) {
-      const txt = t.slice(ti, ti + n); ti += n;
-      if (!txt.trim()) box.appendChild(document.createTextNode(txt));
-      else add('hd-del', txt);
-    } else {
-      box.appendChild(document.createTextNode(t.slice(ti, ti + n)));
-      ti += n; ai += n;
-    }
-  });
-  return box;
+  if (window.Diff) {
+    const q = s => s.replace(/"/g, "'");
+    let ti = 0, ai = 0;
+    Diff.diffChars(q(t), q(a)).forEach(p => {
+      const n = p.value.length;
+      if (p.added) { const x = a.slice(ai, ai + n); ai += n; put(right, x.trim() ? 'hd-add' : '', x); }
+      else if (p.removed) { const x = t.slice(ti, ti + n); ti += n; put(mine, x.trim() ? 'hd-del' : '', x); }
+      else { put(mine, '', t.slice(ti, ti + n)); put(right, '', a.slice(ai, ai + n)); ti += n; ai += n; }
+    });
+  } else { mine.textContent = t; right.textContent = a; }
+  const wrap = document.createElement('div');
+  wrap.className = 'hint-diff-grid';
+  const lab = txt => { const l = document.createElement('span'); l.className = 'hint-diff-label'; l.textContent = txt; return l; };
+  wrap.append(lab('내 답'), mine, lab('정답'), right);
+  return wrap;
 }
 
 function hintWithAccept(idx, typed) {
   const el = $('inline-hint');
   el.className = 'ng';
   el.innerHTML = '';
-  const inp = bs.inputs.find(i => Number(i.dataset.i) === idx);
-  if (inp) {
-    const row = document.createElement('div');
-    row.className = 'hint-diff-row';
-    row.append(document.createTextNode('틀린 곳 '), blankDiffEl(typed, inp.dataset.a, false));
-    el.append(row);
-  }
-  el.append(document.createTextNode('고쳐서 다시 시도 · 그대로 Enter → 정답 보기 · '));
+  // 아직 판정 전 — 어디가 틀렸는지는 정답을 볼 때(최종 판정)에만 보여 준다
+  el.append(document.createTextNode('틀렸습니다 · 고쳐서 다시 시도 · 그대로 Enter → 정답과 비교 · '));
   el.append(acceptBtn(typed, () => acceptBlank(idx)));
 }
 
@@ -3407,12 +3411,7 @@ function hintRevealAccept() {
   el.className = 'ng';
   el.innerHTML = '';
   const inp = bs.inputs.find(i => Number(i.dataset.i) === r.idx);
-  if (inp) {
-    const row = document.createElement('div');
-    row.className = 'hint-diff-row';
-    row.append(document.createTextNode('내 답 '), blankDiffEl(r.typed, inp.dataset.a, true));
-    el.append(row);
-  }
+  if (inp) el.append(diffRowsEl(r.typed, inp.dataset.a));
   el.append(document.createTextNode('정답을 공개했습니다 · '));
   el.append(acceptBtn(r.typed, () => acceptRevealed()));
 }
@@ -3565,7 +3564,9 @@ function acceptFull() {
   if (!fullAttempt) return;
   fullAttempt = null;
   recordOverride(currentCardId);
-  recordBlank(currentCardId, '*', true);
+  if (fullRevealed) { recordOverride(currentCardId); overrideBlank(currentCardId, '*'); }   // 공개 기록까지 정정
+  else recordBlank(currentCardId, '*', true);
+  fullRevealed = false;
   // 인정은 "이 카드는 맞았다"는 판단이므로, 같은 방문에서 먼저 틀렸던 기록까지 포함해
   // 오답 상태를 통째로 지운다. 그대로 두면 다음 라운드에 다시 나와 오답 처리된 것처럼 보인다.
   isRetryMode = false;
@@ -3583,7 +3584,7 @@ function checkFull() {
   if (!card) return;
   const ta = $('answer-input');
   if (!ta.value.trim()) { giveUp(); return; }   // 빈 채로 확인 → 포기로 간주
-  if (lastFullWrong !== null && normalize(ta.value) === lastFullWrong) { giveUp(); return; }   // 같은 오답 재제출 → 포기
+  if (lastFullWrong !== null && normalize(ta.value) === lastFullWrong) { giveUp(ta.value); return; }   // 같은 오답 재제출 → 정답 공개
   $('fb-accept').hidden = true;
   if (normalize(ta.value) === normalize(card.term)) {
     fullAttempt = null;
@@ -3595,22 +3596,11 @@ function checkFull() {
     fullAttempt = true;   // 이 카드 방문에서 오답 판정이 있었음 → 인정 버튼 활성
     lastFullWrong = normalize(ta.value);
     record(currentCardId, false);
-    const fb = feedback('bad', '아직 다릅니다', '비교를 보고 고쳐서 다시 확인하세요. 그대로 다시 확인하면 정답을 보여줍니다.');
+    // 아직 판정 전 — 비교는 정답을 볼 때(같은 답으로 다시 확인 / 정답 보기)만 보여 준다
+    const fb = feedback('bad', '아직 다릅니다', '고쳐서 다시 확인하세요. 그대로 다시 확인하면 정답과 비교해 보여 줍니다.');
     $('fb-accept').hidden = false;
     fb.classList.add('shake');
     setTimeout(() => fb.classList.remove('shake'), 400);
-    const out = $('diff-out');
-    out.innerHTML = '';
-    if (window.Diff) {
-      Diff.diffLines(card.term, ta.value, { newlineIsToken: true }).forEach(part => {
-        const sp = document.createElement('span');
-        if (part.added) sp.className = 'd-ng';
-        else if (part.removed) sp.className = 'd-ok';
-        sp.appendChild(document.createTextNode(part.value));
-        out.appendChild(sp);
-      });
-      $('fb-diff').hidden = false;
-    }
     isRetryMode = true;
     $('badge-retry').hidden = false;
     nextRoundMap.set(currentCardId, 'all');
@@ -3620,12 +3610,44 @@ function checkFull() {
   saveProgress();
 }
 
-function giveUp() {
+/**
+ * 전체 코드 비교 — 줄 단위. 채점처럼 줄 안의 공백·따옴표 종류·빈 줄은 차이로 치지 않는다
+ * (diffLines 의 ignoreWhitespace 는 줄 앞뒤 공백만 무시해서 'b  =  2' 와 'b = 2' 를 다르게 봤다).
+ * 초록 = 정답에만 있는 줄, 빨강 취소선 = 내 답에만 있는 줄.
+ */
+function renderFullDiff(out, answer, typed) {
+  out.innerHTML = '';
+  const lines = t => String(t).replace(/\r\n/g, '\n').split('\n');
+  const key = l => l.replace(/\s+/g, '').replace(/"/g, "'");
+  const A = lines(answer), T = lines(typed);
+  const line = (cls, txt) => {
+    const sp = document.createElement('span');
+    if (cls && txt.trim()) sp.className = cls;
+    sp.textContent = txt;
+    out.append(sp, document.createTextNode('\n'));
+  };
+  let ai = 0, ti = 0;
+  Diff.diffArrays(A.map(key), T.map(key)).forEach(p => {
+    const n = p.value.length;
+    if (p.removed) { for (let k = 0; k < n; k++) line('d-ok', A[ai++]); }
+    else if (p.added) { for (let k = 0; k < n; k++) line('d-ng', T[ti++]); }
+    else { for (let k = 0; k < n; k++) { line('', T[ti++]); ai++; } }
+  });
+  if (out.lastChild) out.lastChild.remove();     // 끝의 줄바꿈 하나
+}
+
+let fullRevealed = false;      // 전체 코드 모드에서 내 오답을 남긴 채 정답을 공개했음 → 인정 가능
+function giveUp(typed) {
   const card = cardMap.get(currentCardId);
   if (!card) return;
-  $('fb-accept').hidden = true;   // 포기한 화면에서는 '인정'할 답이 없다
+  if (typeof typed !== 'string') typed = '';      // 버튼 클릭 이벤트로 불릴 때
+  $('fb-accept').hidden = true;   // 포기한 화면에서는 '인정'할 답이 없다 (오답을 남긴 공개는 아래에서 다시 켠다)
   fullAttempt = null;
+  fullRevealed = false;
   if (hasBlanks(card)) {
+    // 오답 판정을 받고 고치던 칸이 있으면 그 답을 기억해 두었다가 비교·인정을 보여 준다
+    const ng = bs.inputs.find(i => i.classList.contains('ng') && !i.disabled && i.value.trim());
+    bs.lastReveal = ng ? { idx: Number(ng.dataset.i), typed: ng.value } : null;
     bs.inputs.forEach(inp => {
       const idx = Number(inp.dataset.i);
       if (bs.locked.has(idx)) return;
@@ -3642,12 +3664,24 @@ function giveUp() {
     });
     if (bs.wrong.size) nextRoundMap.set(currentCardId, new Set(bs.wrong));
   } else {
-    $('answer-input').disabled = true;
+    const ta = $('answer-input');
+    if (!typed && lastFullWrong !== null && ta.value.trim()) typed = ta.value;   // '정답 보기' 를 눌렀어도 오답 판정 중이던 답
+    ta.disabled = true;
     nextRoundMap.set(currentCardId, 'all');
     record(currentCardId, false);
     recordBlank(currentCardId, '*', false);
   }
   feedback('warn', '정답 확인', '다음 라운드에 다시 출제됩니다.');
+  if (!hasBlanks(card) && typed) {
+    // 최종 판정: 내 답과 정답을 줄 단위로 비교 (공백 차이는 무시)
+    if (window.Diff) {
+      renderFullDiff($('diff-out'), card.term, typed);
+      $('fb-diff').hidden = false;
+    }
+    fullAttempt = true;
+    fullRevealed = true;
+    $('fb-accept').hidden = false;
+  }
   if (isNb(card)) {
     $('fb-answer').hidden = true;          // 정답은 노트북 안의 빈칸에 이미 채워져 있다
   } else {
@@ -3657,6 +3691,7 @@ function giveUp() {
     $('fb-answer').hidden = false;
   }
   toNext();
+  if (hasBlanks(card) && bs.lastReveal) hintRevealAccept();
   updateMeter();
   saveProgress();
 }
@@ -3803,7 +3838,7 @@ document.addEventListener('keydown', e => {
   if (a === $('answer-input') || bs.inputs.includes(a)) return;
   e.preventDefault();                  // 포커스된 '다음 문제' 버튼이 Enter 로 따로 눌리지 않게 한다
   if (!takeEnter(e)) return;
-  if (!nextReady()) { enterLatch = 0; return; }
+  if (!nextReady()) return;
   if (e.shiftKey && bs.lastReveal) { acceptRevealed(); return; }
   advance();
 });
