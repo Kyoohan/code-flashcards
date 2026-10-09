@@ -2935,6 +2935,7 @@ function renderBlanks(card, openSet) {
 
   host.querySelectorAll('.blank-input').forEach(inp => {
     bs.inputs.push(inp);
+    if (inp.disabled) growBlank(inp);     // 이미 드러난 칸은 실제 글꼴로 다시 잰다
     if (!inp.disabled) {
       inp.addEventListener('keydown', onBlankKey);
       inp.addEventListener('input', () => growBlank(inp));
@@ -3003,13 +3004,29 @@ function baseBlankWidth() {
   const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--blank-w'));
   return v || 112;
 }
-function fitWidth(text) {
-  return Math.max(baseBlankWidth(), Math.ceil(String(text).length * blankCharWidth()) + 18);
+const _measure = document.createElement('canvas').getContext('2d');
+/**
+ * 글자 수 × 영문 고정폭으로 재면 한글처럼 넓은 글자가 섞인 답의 끝이 잘린다.
+ * 그 칸에 실제로 적용된 글꼴로 캔버스에서 잰다 (font 를 모르면 글자 수로 어림한다).
+ */
+function fitWidth(text, font) {
+  const t = String(text);
+  let w;
+  if (font && _measure) { _measure.font = font; w = _measure.measureText(t).width; }
+  else w = t.length * blankCharWidth();
+  return Math.max(baseBlankWidth(), Math.ceil(w) + 20);
+}
+function blankFont(inp) {
+  const cs = getComputedStyle(inp);
+  return `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
 }
 /** 입력 내용에 맞춰 폭을 조정 (빈 값이면 기본 폭으로 되돌아간다) */
-function growBlank(inp) { inp.style.width = fitWidth(inp.value) + 'px'; }
-// 웹폰트가 늦게 붙으면 글자 폭이 달라지므로 캐시를 한 번 비운다
-if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { _chW = 0; });
+function growBlank(inp) { inp.style.width = fitWidth(inp.value, blankFont(inp)) + 'px'; }
+// 웹폰트가 늦게 붙으면 글자 폭이 달라지므로 캐시를 비우고, 이미 채워진 칸을 다시 잰다
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => {
+  _chW = 0;
+  bs.inputs.forEach(i => { if (i.value) growBlank(i); });
+});
 
 const STAR_PATH = 'M12 3.6l2.5 5.2 5.7.8-4.1 4 1 5.7-5.1-2.7-5.1 2.7 1-5.7-4.1-4 5.7-.8z';
 function favStarHtml(idx, on) {
@@ -3147,12 +3164,29 @@ function clearBatchScope() {
 const normBlank = s => normalize(s).replace(/\n/g, '');
 const oneLine = s => String(s).replace(/\s*\n\s*/g, ' ');
 
+/**
+ * Enter 를 한 번 누르면 한 번만 처리한다. macOS 한글 입력기는 Enter 한 번에 keydown 을
+ * 두 번 보내는 경우가 있고(조합 끝내기 + Enter), 길게 누르면 자동 반복도 들어온다.
+ * 그러면 첫 번째로 채점이 끝나 '다음 문제' 로 포커스가 옮겨 간 뒤, 두 번째가 그대로
+ * 다음 문제로 넘겨버린다. 그래서 처리한 Enter 는 손을 뗄 때까지 다시 받지 않는다.
+ */
+let enterLatch = 0;
+addEventListener('keyup', e => { if (e.key === 'Enter') enterLatch = 0; }, true);
+addEventListener('blur', () => { enterLatch = 0; });
+function takeEnter(e) {
+  // keyup 을 놓치는 경우(창 전환 등)에 대비해 1초가 지나면 새 Enter 로 본다
+  if (e.repeat || (enterLatch && performance.now() - enterLatch < 1000)) { e.preventDefault(); return false; }
+  enterLatch = performance.now();
+  return true;
+}
+
 function onBlankKey(e) {
   if (e.key !== 'Enter') return;
   e.preventDefault();
   // 마지막 빈칸을 맞히면 finishBlankCard() 가 동기적으로 '다음 문제' 버튼을 띄우고 포커스를 옮긴다.
   // 이 keydown 이 document 까지 올라가면 같은 Enter 한 번이 다음 카드로도 넘겨버리므로 전파를 끊는다.
   e.stopPropagation();
+  if (!takeEnter(e)) return;
 
   const inp = e.target;
   const idx = Number(inp.dataset.i);
@@ -3601,7 +3635,8 @@ document.addEventListener('keydown', e => {
   if (!$('editor-modal').hidden || !$('nb-modal').hidden || !$('stats-modal').hidden || !$('import-modal').hidden || !$('batch-modal').hidden || !$('dlg').hidden) return;
   const a = document.activeElement;
   if (a === $('answer-input') || bs.inputs.includes(a)) return;
-  e.preventDefault();
+  e.preventDefault();                  // 포커스된 '다음 문제' 버튼이 Enter 로 따로 눌리지 않게 한다
+  if (!takeEnter(e)) return;
   advance();
 });
 
