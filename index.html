@@ -584,6 +584,20 @@ textarea.code-surface::placeholder { color: #5a6070; }
 #inline-hint { font-size: 12px; min-height: 1.5em; margin-top: 8px; font-weight: 600; }
 #inline-hint.ok { color: var(--good); }
 #inline-hint.ng { color: var(--bad); }
+.hint-diff-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 5px; color: var(--ink-3); font-weight: 600; min-width: 0; }
+.hint-diff {
+  min-width: 0; overflow-x: auto; white-space: pre; padding: 3px 8px; border-radius: 6px;
+  background: var(--code-bg); color: var(--code-ink); font: 500 12.5px/1.6 'JetBrains Mono', ui-monospace, monospace;
+  font-variant-ligatures: none;
+}
+.hint-diff .hd-del { background: rgba(255, 112, 112, .28); color: #ffb3b3; text-decoration: line-through; text-decoration-color: rgba(255, 179, 179, .7); border-radius: 3px; }
+.hint-diff .hd-add { background: rgba(69, 214, 163, .26); color: #9df0cd; border-radius: 3px; }
+/* 빠진 자리: 글자 사이에 끼운 빨간 세로 막대 */
+.hint-diff .hd-miss {
+  display: inline-block; width: 2px; height: 1.15em; margin: 0 2px; vertical-align: -0.2em;
+  background: #ff7070; border-radius: 1px; box-shadow: 0 0 0 2px rgba(255, 112, 112, .25);
+  color: transparent; overflow: hidden;
+}
 
 .spacer { flex: 1; min-height: 16px; }
 
@@ -3247,10 +3261,59 @@ function onBlankKey(e) {
 }
 
 /** 오답 안내 + "정답으로 인정" 버튼 */
+/**
+ * 내 답의 어디가 틀렸는지 표시한다. 채점처럼 공백과 따옴표 종류(" ')는 차이로 치지 않는다.
+ * reveal=false: 정답을 들키지 않도록 내 답에서 틀린 글자(빨강)와 빠진 자리(‸)만 보여 준다.
+ * reveal=true : 정답을 이미 봤으므로 빠진 글자(초록)까지 보여 준다.
+ */
+function blankDiffEl(typed, answer, reveal) {
+  const box = document.createElement('code');
+  box.className = 'hint-diff';
+  const a = oneLine(answer), t = oneLine(typed);
+  if (!window.Diff) { box.textContent = t; return box; }
+  const q = s => s.replace(/"/g, "'");
+  const parts = Diff.diffChars(q(t), q(a));
+  let ti = 0, ai = 0;
+  const add = (cls, txt) => {
+    const sp = document.createElement('span');
+    sp.className = cls;
+    sp.textContent = txt;
+    box.appendChild(sp);
+  };
+  parts.forEach((p, k) => {
+    const n = p.value.length;
+    if (p.added) {
+      const txt = a.slice(ai, ai + n); ai += n;
+      if (!txt.trim()) return;                          // 공백만 다른 건 틀린 게 아니다
+      if (reveal) add('hd-add', txt);
+      else {
+        // 바로 옆이 틀린 글자면 그 표시로 충분하다 — 빠진 자리 표시는 따로 끼울 때만
+        const near = (parts[k - 1] && parts[k - 1].removed && parts[k - 1].value.trim()) || (parts[k + 1] && parts[k + 1].removed && parts[k + 1].value.trim());
+        if (!near) add('hd-miss', '‸');
+      }
+    } else if (p.removed) {
+      const txt = t.slice(ti, ti + n); ti += n;
+      if (!txt.trim()) box.appendChild(document.createTextNode(txt));
+      else add('hd-del', txt);
+    } else {
+      box.appendChild(document.createTextNode(t.slice(ti, ti + n)));
+      ti += n; ai += n;
+    }
+  });
+  return box;
+}
+
 function hintWithAccept(idx, typed) {
   const el = $('inline-hint');
   el.className = 'ng';
   el.innerHTML = '';
+  const inp = bs.inputs.find(i => Number(i.dataset.i) === idx);
+  if (inp) {
+    const row = document.createElement('div');
+    row.className = 'hint-diff-row';
+    row.append(document.createTextNode('틀린 곳 '), blankDiffEl(typed, inp.dataset.a, false));
+    el.append(row);
+  }
   el.append(document.createTextNode('고쳐서 다시 시도 · 그대로 Enter → 정답 보기 · '));
   el.append(acceptBtn(typed, () => acceptBlank(idx)));
 }
@@ -3315,6 +3378,13 @@ function hintRevealAccept() {
   const el = $('inline-hint');
   el.className = 'ng';
   el.innerHTML = '';
+  const inp = bs.inputs.find(i => Number(i.dataset.i) === r.idx);
+  if (inp) {
+    const row = document.createElement('div');
+    row.className = 'hint-diff-row';
+    row.append(document.createTextNode('내 답 '), blankDiffEl(r.typed, inp.dataset.a, true));
+    el.append(row);
+  }
   el.append(document.createTextNode('정답을 공개했습니다 · '));
   el.append(acceptBtn(r.typed, () => acceptRevealed()));
 }
@@ -3402,13 +3472,22 @@ function feedback(kind, title, desc) {
   $('fb-answer').hidden = true;
   return fb;
 }
+let nextShownAt = 0;
 function toNext() {
   $('btn-jump').hidden = true;
   $('btn-check').hidden = true;
   $('btn-giveup').hidden = true;
   $('btn-next').hidden = false;
+  nextShownAt = performance.now();
   $('btn-next').focus();
 }
+/**
+ * '다음 문제' 가 뜬 직후의 Enter·클릭은 받지 않는다. 채점에 쓴 Enter 가 입력기·브라우저에 따라
+ * 두 번 들어오거나(keydown 재전송, 손 뗄 때 버튼 눌림 등) 하면 결과를 보기도 전에 넘어가 버린다.
+ * 어떤 경로로 들어오든 여기서 한 번에 막는다.
+ */
+const NEXT_GUARD_MS = 450;
+const nextReady = () => performance.now() - nextShownAt > NEXT_GUARD_MS;
 
 function finishBlankCard(hadWrong) {
   if (!hadWrong) nextRoundMap.delete(currentCardId);
@@ -3665,7 +3744,7 @@ $('btn-check').addEventListener('click', () => {
     if (target) { target.focus(); target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); }
   } else checkFull();
 });
-$('btn-next').addEventListener('click', advance);
+$('btn-next').addEventListener('click', () => { if (nextReady()) advance(); });
 $('btn-jump').addEventListener('click', () => {
   const t = bs.inputs.find(i => !i.disabled);
   if (!t) return;
@@ -3696,6 +3775,7 @@ document.addEventListener('keydown', e => {
   if (a === $('answer-input') || bs.inputs.includes(a)) return;
   e.preventDefault();                  // 포커스된 '다음 문제' 버튼이 Enter 로 따로 눌리지 않게 한다
   if (!takeEnter(e)) return;
+  if (!nextReady()) { enterLatch = 0; return; }
   if (e.shiftKey && bs.lastReveal) { acceptRevealed(); return; }
   advance();
 });
