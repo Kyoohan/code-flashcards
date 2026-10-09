@@ -215,6 +215,17 @@ html[data-glass="on"] .panel { background: transparent; -webkit-backdrop-filter:
 html[data-glass="off"] .lens { display: none; }
 .panel-body { position: relative; z-index: 3; padding: 20px; }
 .rail { position: sticky; top: 20px; }
+/* 레일이 화면보다 길면 고정된 채로 아래쪽이 잘려서, 오른쪽을 끝까지 내려야만 레일 아래가 보였다.
+   화면 높이에 맞추고 레일 안에서 따로 스크롤한다 (유리 렌즈는 바깥 패널에 붙어 있어 그대로) */
+@media (min-width: 981px) {
+  .rail { display: flex; flex-direction: column; max-height: var(--rail-max, calc(100dvh - 40px)); }
+  .rail > .panel-body {
+    min-height: 0; overflow-y: auto; border-radius: inherit;
+    scrollbar-width: thin; scrollbar-color: var(--line) transparent; scrollbar-gutter: stable;
+  }
+  .rail > .panel-body::-webkit-scrollbar { width: 8px; }
+  .rail > .panel-body::-webkit-scrollbar-thumb { background: var(--line); border-radius: 99px; border: 2px solid transparent; background-clip: padding-box; }
+}
 @media (max-width: 980px) { .rail { position: static; } }
 
 /* ============================================================
@@ -2119,6 +2130,23 @@ const glass = (function () {
 })();
 
 window.__initGlass = () => glass.init();
+
+/* 레일 높이 = 지금 화면에서 레일이 차지할 수 있는 높이. 맨 위에서는 헤더 아래부터라 더 짧고,
+   스크롤해서 레일이 위에 붙으면 화면 높이 - 여백이 된다. 그래야 레일 맨 아래까지 항상 화면 안이다. */
+(function fitRail() {
+  const rail = document.querySelector('.rail');
+  if (!rail) return;
+  let last = '';
+  // scroll 이벤트는 브라우저가 이미 프레임당 한 번으로 묶어 보내고, 값이 같으면 쓰지 않는다
+  const update = () => {
+    const top = Math.max(20, rail.getBoundingClientRect().top);
+    const v = Math.max(240, Math.floor(innerHeight - top - 20)) + 'px';
+    if (v !== last) { last = v; rail.style.setProperty('--rail-max', v); }
+  };
+  addEventListener('scroll', update, { passive: true });
+  addEventListener('resize', update);
+  update();
+})();
 
 /* ============================================================
    7. FSA (File System Access API) 영구 저장
