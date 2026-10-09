@@ -595,6 +595,7 @@ textarea.code-surface::placeholder { color: #5a6070; }
 #inline-hint { font-size: 12px; min-height: 1.5em; margin-top: 8px; font-weight: 600; }
 #inline-hint.ok { color: var(--good); }
 #inline-hint.ng { color: var(--bad); }
+#nb-stage:focus, #blank-stage:focus { outline: none; }
 .hint-diff-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; align-items: baseline; margin-bottom: 6px; }
 .hint-diff-label { color: var(--ink-3); font-weight: 600; font-size: 11.5px; }
 .hint-diff-grid .hint-diff { justify-self: start; max-width: 100%; }
@@ -2934,7 +2935,7 @@ function renderBlanks(card, openSet) {
   $('nb-stage').hidden = !nb;
   host.innerHTML = '';
   $('inline-hint').textContent = '';
-  bs = { cardId: card.id, inputs: [], locked: new Set(), wrong: new Set(), frozen: new Set(), revealed: new Set(), lastWrong: new Map(), open: 0 };
+  bs = { cardId: card.id, host, hold: false, inputs: [], locked: new Set(), wrong: new Set(), frozen: new Set(), revealed: new Set(), lastWrong: new Map(), open: 0 };
   const favSet = favIndices(card);
 
   // 빈칸 하나의 입력 요소 HTML. idx 는 카드 전체에서 0부터 이어지는 번호.
@@ -2976,6 +2977,7 @@ function renderBlanks(card, openSet) {
     bs.inputs.push(inp);
     if (inp.disabled) growBlank(inp);     // 이미 드러난 칸은 실제 글꼴로 다시 잰다
     if (!inp.disabled) {
+      inp.addEventListener('focus', () => { bs.hold = false; });   // 다른 칸을 직접 누르면 멈춤도 끝
       inp.addEventListener('keydown', onBlankKey);
       inp.addEventListener('input', () => growBlank(inp));
     }
@@ -3259,6 +3261,7 @@ function submitBlank(inp, shift) {
   const now = performance.now();
   if (now - lastJudgeAt < 400) return;
   lastJudgeAt = now;
+  bs.hold = false;
 
   // ⇧Enter = 정답으로 인정: 지금 칸이 오답 판정 상태면 그 답을, 아니면 방금 공개된 칸의 내 답을
   if (shift) {
@@ -3394,14 +3397,30 @@ function revealBlank(inp, idx) {
   nextRoundMap.set(currentCardId, new Set(bs.wrong));
   record(currentCardId, false);
   recordBlank(currentCardId, idx, false);
-  hint('ng', '정답을 공개했습니다 — 다음 라운드에 다시 나옵니다');
   updateBlankBadge();
   updateMeter();
   saveProgress();
+  if (bs.inputs.some(i => !i.disabled)) {
+    // 공개된 정답을 보는 단계 — 다음 빈칸으로는 Enter 를 한 번 더 눌러야 간다
+    holdOnReveal();
+    if (!bs.lastReveal) hint('ng', '정답을 공개했습니다 · Enter → 다음 빈칸');
+  } else finishBlankCard(true);
+  if (bs.lastReveal) hintRevealAccept();
+}
+/** 정답을 공개한 칸에 머문다. 입력칸은 잠겨서 포커스를 못 받으므로 빈칸 영역이 대신 받는다 */
+function holdOnReveal() {
+  bs.hold = true;
+  const host = bs.host;
+  if (!host) return;
+  host.tabIndex = -1;
+  host.focus({ preventScroll: true });
+}
+/** 멈춤을 끝내고 다음 빈칸으로 */
+function releaseHold() {
+  bs.hold = false;
   const nxt = bs.inputs.find(i => !i.disabled);
   if (nxt) focusBlank(nxt);
-  else finishBlankCard(true);
-  if (bs.lastReveal) hintRevealAccept();
+  else finishBlankCard(bs.wrong.size > 0);
 }
 /** 공개된 칸에 대해 "내 답을 정답으로 인정" 안내 */
 function hintRevealAccept() {
@@ -3412,7 +3431,7 @@ function hintRevealAccept() {
   el.innerHTML = '';
   const inp = bs.inputs.find(i => Number(i.dataset.i) === r.idx);
   if (inp) el.append(diffRowsEl(r.typed, inp.dataset.a));
-  el.append(document.createTextNode('정답을 공개했습니다 · '));
+  el.append(document.createTextNode(bs.hold ? '정답을 공개했습니다 · Enter → 다음 빈칸 · ' : '정답을 공개했습니다 · '));
   el.append(acceptBtn(r.typed, () => acceptRevealed()));
 }
 function acceptBtn(typed, onClick) {
@@ -3448,7 +3467,10 @@ function acceptRevealed() {
   updateBlankBadge();
   saveProgress();
   toast('정답으로 처리했습니다', 'good');
-  if (bs.inputs.some(i => !i.disabled)) return;     // 아직 풀 칸이 남았으면 그대로 이어서 푼다
+  if (bs.inputs.some(i => !i.disabled)) {           // 아직 풀 칸이 남았으면 이어서 푼다
+    if (bs.hold) releaseHold();
+    return;
+  }
   finishBlankCard(bs.wrong.size > 0);
   advance();                 // 마지막 칸이었으면 '인정' 버튼처럼 바로 다음 문제로
 }
@@ -3809,6 +3831,7 @@ $('btn-check').addEventListener('click', () => {
 });
 $('btn-next').addEventListener('click', () => { if (nextReady()) advance(); });
 $('btn-jump').addEventListener('click', () => {
+  bs.hold = false;
   const t = bs.inputs.find(i => !i.disabled);
   if (!t) return;
   t.scrollIntoView({ block: 'center' });
@@ -3828,6 +3851,20 @@ $('answer-input').addEventListener('keydown', e => {
     ta.selectionStart = ta.selectionEnd = s + 4;
   }
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); checkFull(); }
+});
+
+// 정답을 공개한 칸에 멈춘 상태: Enter → 다음 빈칸, ⇧Enter → 내 답 인정
+document.addEventListener('keydown', e => {
+  if (!bs.hold || e.key !== 'Enter' || e.ctrlKey || e.metaKey) return;
+  if (!$('editor-modal').hidden || !$('dlg').hidden) return;
+  const a = document.activeElement;
+  if (bs.inputs.includes(a)) { bs.hold = false; return; }
+  if (a && a !== bs.host && a !== document.body && !(bs.host && bs.host.contains(a))) return;   // 다른 버튼·입력에 있으면 그쪽 Enter
+  e.preventDefault();
+  if (performance.now() - lastJudgeAt < 400) return;     // 공개에 쓴 Enter 의 중복
+  if (!takeEnter(e)) return;
+  if (e.shiftKey && bs.lastReveal) { acceptRevealed(); return; }
+  releaseHold();
 });
 
 document.addEventListener('keydown', e => {
