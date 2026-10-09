@@ -519,6 +519,9 @@ textarea.code-surface::placeholder { color: #5a6070; }
 .md-body .md-hr { border: none; border-top: 1px solid var(--line); margin: 1em 0; }
 .md-body a { color: var(--accent-ink); text-underline-offset: 3px; }
 .md-body .md-imgalt { color: var(--ink-3); font-size: .92em; }
+.md-body .md-img { display: block; max-width: min(100%, 640px); height: auto; margin: 8px 0 12px; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
+.nbe-att { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.nbe-att img { height: 56px; width: auto; max-width: 160px; object-fit: contain; border-radius: 6px; border: 1px solid var(--line); background: #fff; }
 .md-body .md-table-wrap { overflow-x: auto; margin: 0 0 .9em; }
 .md-body .md-table { border-collapse: collapse; font-size: 13px; }
 .md-body .md-table th, .md-body .md-table td { padding: 5px 12px; border: 1px solid var(--line); }
@@ -1038,13 +1041,13 @@ pre.answer-code {
             <button class="act primary wide" id="btn-edit">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>카드 편집</button>
             <button class="act wide" id="btn-notebook">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h11l5 5v11H4z"/><path d="M8 4v16M12 12h5M12 16h5"/></svg>노트북(.ipynb) 가져오기</button>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h11l5 5v11H4z"/><path d="M8 4v16M12 12h5M12 16h5"/></svg>노트북·문서 가져오기</button>
             <button class="act" id="btn-import">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>가져오기</button>
             <button class="act" id="btn-export">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5M4 21h16"/></svg>내보내기</button>
           </div>
-          <input id="file-input" type="file" accept=".json,.ipynb" hidden>
+          <input id="file-input" type="file" accept=".json,.ipynb,.docx" hidden>
         </div>
 
         <div class="rail-group">
@@ -1261,8 +1264,8 @@ pre.answer-code {
   <div class="sheet">
     <div class="sheet-head">
       <div>
-        <h3>노트북 가져오기</h3>
-        <div class="sub" id="nb-sub">노트북 전체를 빈칸을 뚫을 수 있는 뷰어로 가져옵니다</div>
+        <h3>노트북·문서 가져오기</h3>
+        <div class="sub" id="nb-sub">노트북(.ipynb)이나 Word·Google Docs 문서(.docx)를 빈칸을 뚫을 수 있는 뷰어로 가져옵니다</div>
       </div>
       <button class="icon-btn" data-close="nb-modal" aria-label="닫기">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
@@ -1271,8 +1274,8 @@ pre.answer-code {
     <div class="sheet-body">
       <div class="drop-zone" id="nb-drop">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
-        <h4>.ipynb 파일을 여기에 놓으세요</h4>
-        <p>또는 클릭해서 선택 · 마크다운, 코드, 실행 결과가 노트북 모양 그대로 학습 화면에 나타납니다</p>
+        <h4>.ipynb 또는 .docx 파일을 여기에 놓으세요</h4>
+        <p>또는 클릭해서 선택 · 노트북은 마크다운·코드·실행 결과가, 문서는 문단·목록·표·그림이 그대로 학습 화면에 나타납니다. Google Docs 는 파일 → 다운로드 → Microsoft Word(.docx)로 받으세요</p>
       </div>
       <div id="nb-result" hidden>
         <div class="nb-controls">
@@ -1334,7 +1337,7 @@ pre.answer-code {
         <textarea id="import-text" class="code-surface import-text" spellcheck="false" placeholder='[
   { "definition": "문제 설명", "term": "코드 ({{빈칸}} 표시 가능)" }
 ]'></textarea>
-        <div class="hint" style="margin-top:10px">코드 안의 <code>{{ }}</code>는 빈칸으로 변환됩니다. .json이나 .ipynb 파일을 이 창에 끌어다 놓아도 됩니다.</div>
+        <div class="hint" style="margin-top:10px">코드 안의 <code>{{ }}</code>는 빈칸으로 변환됩니다. .json, .ipynb, .docx 파일을 이 창에 끌어다 놓아도 됩니다.</div>
       </div>
       <div id="import-stage-preview" hidden>
         <div class="nb-controls">
@@ -1406,7 +1409,8 @@ pre.answer-code {
 
 <div id="toasts" data-liquid-ignore></div>
 
-<script src="nbview.js?v=2"></script>
+<script src="nbview.js?v=3"></script>
+<script src="docx.js?v=1"></script>
 <script>
 'use strict';
 
@@ -2830,7 +2834,7 @@ function advance() { activeQueue.shift(); nextCard(); }
 
 function showEmpty() {
   $('stage-panel').classList.remove('nb-mode');
-  $('question').innerHTML = '<span class="empty">아직 카드가 없습니다.\n왼쪽 <b>카드 편집</b>으로 직접 추가하거나, <b>노트북 가져오기</b>로 .ipynb 파일을 불러오세요.</span>';
+  $('question').innerHTML = '<span class="empty">아직 카드가 없습니다.\n왼쪽 <b>카드 편집</b>으로 직접 추가하거나, <b>노트북·문서 가져오기</b>로 .ipynb · .docx 파일을 불러오세요.</span>';
   $('mode-blank').hidden = true;
   $('mode-full').hidden = true;
   $('feedback').hidden = true;
@@ -2881,7 +2885,7 @@ function showCard() {
   const nb = isNb(card);
   $('stage-panel').classList.toggle('nb-mode', nb);
   if (hasBlanks(card)) {
-    $('badge-mode').textContent = nb ? '노트북 빈칸' : '빈칸 채우기';
+    $('badge-mode').textContent = nb ? ((card.cells || []).some(c => c.type === 'code') ? '노트북 빈칸' : '문서 빈칸') : '빈칸 채우기';
     $('blank-label').textContent = nb ? '노트북 — 빈칸에 답을 쓰고 Enter로 하나씩 확인' : '빈칸 채우기 — Enter로 하나씩 확인';
     $('mode-full').hidden = true;
     $('mode-blank').hidden = false;
@@ -2898,7 +2902,7 @@ function showCard() {
     $('btn-jump').hidden = !nb;
   } else if (nb) {
     // 빈칸이 없는 노트북 카드는 읽기 전용으로 보여주고 넘어가게만 한다
-    $('badge-mode').textContent = '노트북 · 빈칸 없음';
+    $('badge-mode').textContent = ((card.cells || []).some(c => c.type === 'code') ? '노트북' : '문서') + ' · 빈칸 없음';
     $('blank-label').textContent = '노트북';
     $('badge-progress').hidden = true;
     $('mode-full').hidden = true;
@@ -5160,7 +5164,7 @@ $('btn-import').addEventListener('click', () => {
   $('import-modal').hidden = false;
   setTimeout(() => $('import-text').focus(), 60);
 });
-$('import-file-btn').addEventListener('click', () => { $('file-input').accept = '.json,.ipynb'; $('file-input').click(); });
+$('import-file-btn').addEventListener('click', () => { $('file-input').accept = '.json,.ipynb,.docx'; $('file-input').click(); });
 $('import-submit').addEventListener('click', async () => {
   if (!$('import-stage-preview').hidden) {
     const picked = importCards.filter((_, i) => importPicked[i]);
@@ -5194,6 +5198,7 @@ $('file-input').addEventListener('change', function () {
 });
 
 function handleFile(file) {
+  if (/\.docx$/i.test(file.name)) { loadDocxFile(file); return; }
   const reader = new FileReader();
   reader.onload = e => handleText(String(e.target.result || ''), file.name);
   reader.readAsText(file);
@@ -5287,7 +5292,9 @@ function renderNbList() {
     t.textContent = c.definition;
     const d = document.createElement('div');
     d.className = 'd';
-    d.textContent = `마크다운 ${st.md} · 코드 ${st.code} · 출력 ${st.outs}` + (st.blanks ? ` · 빈칸 ${st.blanks}` : '') + (st.code ? '' : ' · 텍스트만') + ` · ${fmtKB(st.bytes)}`;
+    const pics = c.cells.reduce((n, x) => n + (x.att ? Object.keys(x.att).length : 0), 0);
+    d.textContent = (st.code ? `마크다운 ${st.md} · 코드 ${st.code} · 출력 ${st.outs}` : `단락 ${st.md}` + (pics ? ` · 그림 ${pics}` : ''))
+      + (st.blanks ? ` · 빈칸 ${st.blanks}` : '') + ` · ${fmtKB(st.bytes)}`;
     const code = document.createElement('div');
     code.className = 'c';
     code.innerHTML = nbSnippetHtml(c);
@@ -5330,12 +5337,34 @@ function resetNbModal() {
 }
 
 function loadNotebook(nb, fileName) {
-  nbFileName = (fileName || 'notebook').replace(/\.ipynb$/i, '');
   let doc;
   try { doc = nbvParseCells(nb); }
   catch (e) { console.warn('notebook parse failed', e); toast('노트북을 읽는 중 문제가 생겼습니다', 'bad'); resetNbModal(); return; }
+  showParsedDoc(doc, (fileName || 'notebook').replace(/\.ipynb$/i, ''), 'ipynb');
+}
+
+/** .docx (Word · Google Docs 내보내기) → 마크다운 셀로 바꿔 노트북과 같은 흐름에 태운다 */
+async function loadDocxFile(file) {
+  $('import-modal').hidden = true;
+  $('nb-modal').hidden = false;
+  resetNbModal();
+  $('nb-sub').textContent = `${file.name} 읽는 중…`;
+  let doc;
+  try { doc = await dxParseDocx(await file.arrayBuffer()); }
+  catch (e) {
+    console.warn('docx parse failed', e);
+    toast('문서를 읽지 못했습니다 — ' + (e && e.message ? e.message : '형식 오류'), 'bad');
+    $('nb-sub').textContent = '노트북(.ipynb)이나 Word·Google Docs 문서(.docx)를 빈칸을 뚫을 수 있는 뷰어로 가져옵니다';
+    return;
+  }
+  showParsedDoc(doc, file.name.replace(/\.docx$/i, ''), 'docx');
+  if (doc.lostImages) toast(`그림 ${doc.lostImages}개는 형식·용량 때문에 넣지 못했습니다`, 'bad');
+}
+
+function showParsedDoc(doc, name, ext) {
+  nbFileName = name || 'notebook';
   if (!doc.cells.length) {
-    toast('내용이 있는 셀을 찾지 못했습니다', 'bad');
+    toast(ext === 'docx' ? '문서에서 내용을 찾지 못했습니다' : '내용이 있는 셀을 찾지 못했습니다', 'bad');
     resetNbModal();
     return;
   }
@@ -5348,10 +5377,12 @@ function loadNotebook(nb, fileName) {
   $('nb-deck-name').value = nbFileName;
   renderNbList();
   const md = doc.cells.filter(c => c.type === 'markdown').length;
-  $('nb-sub').textContent = `${nbFileName}.ipynb · 셀 ${doc.cells.length}개 (마크다운 ${md} · 코드 ${doc.cells.length - md})`;
+  $('nb-sub').textContent = ext === 'docx'
+    ? `${nbFileName}.docx · 단락 ${doc.cells.length}개` + (doc.images ? ` · 그림 ${doc.images}개` : '')
+    : `${nbFileName}.ipynb · 셀 ${doc.cells.length}개 (마크다운 ${md} · 코드 ${doc.cells.length - md})`;
 }
 
-$('nb-drop').addEventListener('click', () => { $('file-input').accept = '.ipynb'; $('file-input').click(); });
+$('nb-drop').addEventListener('click', () => { $('file-input').accept = '.ipynb,.docx'; $('file-input').click(); });
 ['dragenter', 'dragover'].forEach(ev => $('nb-drop').addEventListener(ev, e => {
   e.preventDefault(); $('nb-drop').classList.add('over');
 }));
@@ -5368,6 +5399,7 @@ window.addEventListener('drop', e => {
   const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
   if (!f) return;
   if (/\.ipynb$/i.test(f.name)) { $('nb-modal').hidden = false; resetNbModal(); handleFile(f); }
+  else if (/\.docx$/i.test(f.name)) handleFile(f);
   else if (/\.json$/i.test(f.name)) handleFile(f);
 });
 

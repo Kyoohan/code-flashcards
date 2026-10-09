@@ -35,6 +35,37 @@ function nbvImageOut(mime, raw) {
   return { kind: 'image', mime, data, size: data.length };
 }
 
+/**
+ * 마크다운 셀의 첨부 이미지 (nbformat 의 cell.attachments, .docx 의 그림).
+ * 저장 형태: cell.att = { 이름: { mime, data(base64) } }. 본문에서는 ![설명](attachment:이름) 으로 가리킨다.
+ * refs 를 주면 본문이 실제로 가리키는 것만 남긴다.
+ */
+function nbvCleanAtt(att, refs) {
+  if (!att || typeof att !== 'object') return null;
+  const out = {};
+  let n = 0;
+  Object.keys(att).forEach(name => {
+    if (refs && !refs.has(name)) return;
+    const f = att[name];
+    if (!f || !NBV_IMG_MIME[f.mime] || typeof f.data !== 'string' || !/^[A-Za-z0-9+/=]+$/.test(f.data) || f.data.length > NBV_MAX_IMG) return;
+    out[name] = { mime: f.mime, data: f.data };
+    n++;
+  });
+  return n ? out : null;
+}
+const nbvAttRefs = src => new Set([...String(src).matchAll(/!\[[^\]]*\]\(attachment:([^)\s]+)\)/g)].map(m => m[1]));
+/** nbformat attachments({이름: {mime: base64}}) → {이름: {mime, data}} */
+function nbvFromNbAttachments(a) {
+  if (!a || typeof a !== 'object') return null;
+  const out = {};
+  Object.keys(a).forEach(name => {
+    const bundle = a[name] || {};
+    const mime = Object.keys(bundle).find(m => NBV_IMG_MIME[m]);
+    if (mime) out[name] = { mime, data: nbvJoin(bundle[mime]).replace(/\s+/g, '') };
+  });
+  return out;
+}
+
 function nbvPickMime(d) {
   for (const mime of ['image/png', 'image/jpeg', 'image/gif']) {
     if (d[mime]) { const o = nbvImageOut(mime, d[mime]); if (o) return o; }
@@ -97,7 +128,14 @@ function nbvParseCells(nb) {
     if (!c || typeof c !== 'object') return;
     const source = nbvJoin(c.source).replace(/\r\n?/g, '\n').replace(/\s+$/, '');
     if (c.cell_type === 'markdown') {
-      nbvSplitMd(source).forEach(chunk => { if (chunk.trim()) cells.push({ type: 'markdown', source: chunk, blanks: [] }); });
+      const att = nbvFromNbAttachments(c.attachments);
+      nbvSplitMd(source).forEach(chunk => {
+        if (!chunk.trim()) return;
+        const cell = { type: 'markdown', source: chunk, blanks: [] };
+        const a = att && nbvCleanAtt(att, nbvAttRefs(chunk));     // 쪼갠 조각마다 자기가 쓰는 그림만
+        if (a) cell.att = a;
+        cells.push(cell);
+      });
     } else if (c.cell_type === 'code') {
       const outputs = nbvParseOutputs(c.outputs);
       if (!source.trim() && !outputs.length) return;
@@ -158,6 +196,7 @@ function nbvNormalizeCell(c) {
   const type = c.type === 'code' ? 'code' : 'markdown';
   const source = String(c.source == null ? '' : c.source);
   const cell = { type, source, blanks: sanitizeBlanks(c.blanks, source) };
+  if (type === 'markdown') { const a = nbvCleanAtt(c.att); if (a) cell.att = a; }
   if (type === 'code') {
     cell.exec = c.exec == null ? null : c.exec;
     cell.outputs = (Array.isArray(c.outputs) ? c.outputs : []).filter(nbvValidOutput).map(nbvNormalizeOutput);
@@ -206,6 +245,7 @@ function nbvGroup(cells, mode, depth, fallback) {
 function nbvMakeCard(group, lang, opts) {
   const cells = group.cells.map(c => {
     const out = { type: c.type, source: c.source, blanks: [] };
+    if (c.att && opts.outputs === 'all') out.att = c.att;      // 그림 빼기를 고르면 문서 그림도 뺀다
     if (c.type === 'code') {
       out.exec = c.exec == null ? null : c.exec;
       out.outputs = [];
@@ -245,6 +285,7 @@ function nbvHighlight(src, lang) {
   } catch (e) { return nbvEsc(src); }
 }
 
+let nbvAtt = null;      // 지금 그리는 마크다운 셀의 첨부 그림
 /** 인라인 마크다운. 입력은 원문(이스케이프 전). 먼저 전부 이스케이프하므로 원문 HTML 은 통과하지 못한다 */
 function nbvInline(raw) {
   let t = nbvEsc(raw);
@@ -252,7 +293,13 @@ function nbvInline(raw) {
   const keep = h => { stash.push(h); return '\u0001' + (stash.length - 1) + '\u0002'; };
   t = t.replace(/&lt;br\s*\/?&gt;/gi, () => keep('<br>'));
   t = t.replace(/(`+)([^`\n]+?)\1/g, (_, __, c) => keep('<code class="md-code">' + c + '</code>'));
-  t = t.replace(/!\[([^\]]*)\]\(([^)]*)\)/g, (_, alt) => alt ? keep('<span class="md-imgalt">[' + alt + ']</span>') : '');
+  t = t.replace(/!\[([^\]]*)\]\(([^)]*)\)/g, (_, alt, url) => {
+    // 셀에 첨부된 그림만 그린다 (외부 주소는 불러오지 않는다). 데이터는 nbvCleanAtt 로 검증된 base64
+    const m = /^attachment:(.+)$/.exec(url.replace(/&amp;/g, '&'));
+    const f = m && nbvAtt && Object.prototype.hasOwnProperty.call(nbvAtt, m[1]) ? nbvAtt[m[1]] : null;
+    if (f && NBV_IMG_MIME[f.mime] && /^[A-Za-z0-9+/=]+$/.test(f.data)) return keep(`<img class="md-img" alt="${alt}" loading="lazy" src="data:${f.mime};base64,${f.data}">`);
+    return alt ? keep('<span class="md-imgalt">[' + alt + ']</span>') : '';
+  });
   t = t.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+&quot;[^&]*?&quot;)?\)/g, (m, text, url) => {
     const u = url.replace(/&amp;/g, '&');
     return /^(https?:\/\/|mailto:|#)/i.test(u)
@@ -673,7 +720,23 @@ function nbvCellEl(cell, ci, base, lang, ctx) {
     const chips = document.createElement('div');
     chips.className = 'nbe-chips';
     chips.dataset.ci = ci;
-    el.append(head, src, chips);
+    el.append(head, src);
+    if (cell.type !== 'code' && cell.att) {
+      // 원문에는 ![그림](attachment:…) 만 보이므로 어떤 그림인지 작게 보여 준다 (소스 밖이라 오프셋과 무관)
+      const strip = document.createElement('div');
+      strip.className = 'nbe-att';
+      Object.keys(cell.att).forEach(name => {
+        const f = cell.att[name];
+        if (!NBV_IMG_MIME[f.mime] || !/^[A-Za-z0-9+/=]+$/.test(f.data)) return;
+        const img = document.createElement('img');
+        img.src = `data:${f.mime};base64,${f.data}`;
+        img.alt = img.title = name;
+        img.loading = 'lazy';
+        strip.appendChild(img);
+      });
+      el.appendChild(strip);
+    }
+    el.appendChild(chips);
     if (cell.type === 'code' && (cell.outputs || []).length) {
       const det = document.createElement('details');
       det.className = 'nbe-outs';
@@ -705,7 +768,9 @@ function nbvCellEl(cell, ci, base, lang, ctx) {
     body.appendChild(pre);
   } else {
     body.classList.add('md-body');
-    body.innerHTML = nbvFill(nbvMd(nbvTokenized(cell, base), lang), cell, base, (k, ans) => make(base + k, ans));
+    nbvAtt = cell.att || null;
+    try { body.innerHTML = nbvFill(nbvMd(nbvTokenized(cell, base), lang), cell, base, (k, ans) => make(base + k, ans)); }
+    finally { nbvAtt = null; }
   }
   el.append(gutter, body);
 
