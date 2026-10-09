@@ -2690,11 +2690,23 @@ function saveProgress() {
     nextRoundMap: serMap(nextRoundMap),
     prevWrongMap: serMap(prevWrongMap),
     currentCardId, isRetryMode, favMode, batchScope: batchScope ? [...batchScope] : null, runSeen: [...runSeen], savedAt: Date.now(),
+    cardState: blankStateOf(currentCardId),
   }));
   stampSave();
   fsaSync();
   gist.schedule('progress');
 }
+/**
+ * 지금 풀고 있는 카드 안에서 어디까지 풀었는지. 노트북은 파일 하나가 카드 한 장이라
+ * 이게 없으면 새로고침할 때마다 첫 빈칸부터 다시 시작한다.
+ */
+function blankStateOf(id) {
+  if (!id || !bs || bs.cardId !== id) return null;
+  const done = [...bs.locked].filter(i => !bs.frozen.has(i));
+  if (!done.length && !bs.wrong.size) return null;
+  return { id, n: bs.inputs.length, done, wrong: [...bs.wrong], revealed: [...bs.revealed] };
+}
+let pendingCardState = null;      // 새로고침 직후 한 번만 되살린다
 function loadProgress() {
   const s = safeParse(localStorage.getItem(progKey(activeDeckId)), null);
   if (!s) return null;
@@ -2883,7 +2895,7 @@ function renderBlanks(card, openSet) {
   $('nb-stage').hidden = !nb;
   host.innerHTML = '';
   $('inline-hint').textContent = '';
-  bs = { inputs: [], locked: new Set(), wrong: new Set(), frozen: new Set(), revealed: new Set(), lastWrong: new Map(), open: 0 };
+  bs = { cardId: card.id, inputs: [], locked: new Set(), wrong: new Set(), frozen: new Set(), revealed: new Set(), lastWrong: new Map(), open: 0 };
   const favSet = favIndices(card);
 
   // 빈칸 하나의 입력 요소 HTML. idx 는 카드 전체에서 0부터 이어지는 번호.
@@ -2932,6 +2944,7 @@ function renderBlanks(card, openSet) {
     btn.addEventListener('mousedown', e => e.preventDefault());  // 입력 포커스 유지
     btn.addEventListener('click', () => toggleFav(currentCardId, Number(btn.dataset.i)));
   });
+  restoreBlankState(card);
   updateBlankBadge();
 
   const first = bs.inputs.find(i => !i.disabled);
@@ -2947,6 +2960,29 @@ function renderBlanks(card, openSet) {
   } else if (first) first.focus();
   if (nb && !hasBlanks(card)) return;      // 읽기 전용 노트북 카드
   if (bs.open === 0) finishBlankCard(false);
+  else if (!first) finishBlankCard(bs.wrong.size > 0);   // 되살린 진행으로 이미 다 푼 카드
+}
+
+/** 저장해 둔 카드 안 진행을 입력칸에 다시 채운다 (기록·통계는 이미 남아 있으므로 건드리지 않는다) */
+function restoreBlankState(card) {
+  const st = pendingCardState;
+  pendingCardState = null;
+  // 그 사이 카드를 고쳐 빈칸 수가 바뀌었으면 번호가 어긋나므로 처음부터 푼다
+  if (!st || st.id !== card.id || st.n !== bs.inputs.length) return;
+  const byIdx = new Map(bs.inputs.map(i => [Number(i.dataset.i), i]));
+  const revealed = new Set(st.revealed || []);
+  (st.wrong || []).forEach(i => { if (byIdx.has(i) && !bs.frozen.has(i)) bs.wrong.add(i); });
+  (st.done || []).forEach(i => {
+    const inp = byIdx.get(i);
+    if (!inp || inp.disabled) return;
+    inp.value = oneLine(inp.dataset.a);
+    growBlank(inp);
+    inp.disabled = true;
+    inp.classList.add(revealed.has(i) ? 'revealed' : 'ok');
+    bs.locked.add(i);
+    if (revealed.has(i)) bs.revealed.add(i);
+  });
+  if (bs.wrong.size) { isRetryMode = true; $('badge-retry').hidden = false; }
 }
 
 /* ── 빈칸 폭 ────────────────────────────────────────────
@@ -3141,8 +3177,9 @@ function onBlankKey(e) {
     recordBlank(currentCardId, idx, !bs.wrong.has(idx));
     hint('ok', '정답');
     updateBlankBadge();
+    saveProgress();                  // 빈칸 하나 맞힐 때마다 저장 — 새로고침해도 이 칸부터 이어진다
     const nxt = bs.inputs.find(i => !i.disabled);
-    if (nxt) nxt.focus();
+    if (nxt) focusBlank(nxt);
     else finishBlankCard(bs.wrong.size > 0);
   } else {
     inp.classList.add('ng');
@@ -3198,7 +3235,7 @@ function acceptBlank(idx) {
   saveProgress();
   toast('정답으로 처리했습니다', 'good');
   const nxt = bs.inputs.find(i => !i.disabled);
-  if (nxt) { nxt.focus(); return; }
+  if (nxt) { focusBlank(nxt); return; }
   finishBlankCard(bs.wrong.size > 0);
   advance();                 // 마지막 칸을 인정한 것이면 바로 다음 문제로
 }
@@ -3222,8 +3259,29 @@ function revealBlank(inp, idx) {
   updateMeter();
   saveProgress();
   const nxt = bs.inputs.find(i => !i.disabled);
-  if (nxt) nxt.focus();
+  if (nxt) focusBlank(nxt);
   else finishBlankCard(true);
+}
+
+/**
+ * 다음 빈칸으로 넘어간다. focus() 는 칸이 조금이라도 보이면 스크롤하지 않아서,
+ * 노트북 아래쪽에 붙어 있는 버튼 바 뒤에 가려진 칸은 그대로 묻혀 있었다.
+ * 그래서 직접 재서, 가려졌거나 화면 끝에 걸려 있으면 화면 가운데로 옮긴다.
+ */
+function focusBlank(inp) {
+  if (!inp) return;
+  inp.focus({ preventScroll: true });
+  const r = inp.getBoundingClientRect();
+  let bottom = innerHeight;
+  const dock = $('stage-dock');
+  if (dock && dock.offsetParent) {
+    const top = dock.getBoundingClientRect().top;
+    if (top < innerHeight) bottom = top;   // 아래에 붙은 버튼 바 위까지만 보이는 영역으로 친다
+  }
+  if (r.top < 72 || r.bottom > bottom - 28) {
+    const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    inp.scrollIntoView({ block: 'center', behavior: smooth ? 'smooth' : 'auto' });
+  }
 }
 
 function hint(kind, msg) {
@@ -3485,6 +3543,7 @@ async function boot(freshStart = false) {
       batchScope = Array.isArray(p.batchScope) && p.batchScope.length ? new Set(p.batchScope) : null;
       // 예전 저장본에는 없을 수 있다 — 그때는 지금 있는 카드를 전부 본 것으로 쳐서 다시 붙지 않게 한다
       runSeen = Array.isArray(p.runSeen) ? new Set(p.runSeen) : new Set(allCards.map(c => c.id));
+      pendingCardState = p.cardState || null;
       reconcile();
       updateFavUI();
       updateScopeUI();
