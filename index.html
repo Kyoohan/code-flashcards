@@ -416,7 +416,7 @@ textarea.code-surface::placeholder { color: #5a6070; }
   --bi-fz-bg: rgba(69,214,163,.1);  --bi-fz-line: rgba(69,214,163,.5); --bi-fz-ink: #6fd8ae;
   display: inline-block; vertical-align: baseline;
   width: var(--blank-w); padding: 0 6px; margin: 0 5px;
-  transition: width .12s ease, background .15s, border-color .15s;
+  transition: background .15s, border-color .15s;   /* 폭은 애니메이션하지 않는다 — 늘어나는 동안 끝 글자가 가려졌다 */
   background: var(--bi-bg);
   border: none; border-bottom: 2px solid var(--bi-line);
   border-radius: 5px 5px 0 0;
@@ -3021,7 +3021,14 @@ function blankFont(inp) {
   return `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
 }
 /** 입력 내용에 맞춰 폭을 조정 (빈 값이면 기본 폭으로 되돌아간다) */
-function growBlank(inp) { inp.style.width = fitWidth(inp.value, blankFont(inp)) + 'px'; }
+function growBlank(inp) {
+  const w = fitWidth(inp.value, blankFont(inp));
+  inp.style.width = w + 'px';
+  // 잰 폭과 실제 그려진 폭이 다를 때(글꼴 대체, 입력기 조합 중인 글자 등) 모자란 만큼 더 늘린다
+  const over = inp.scrollWidth - inp.clientWidth;
+  if (over > 0) inp.style.width = (w + over + 4) + 'px';
+  inp.scrollLeft = 0;    // 넘쳤던 동안 밀려 있던 글자를 제자리로
+}
 // 웹폰트가 늦게 붙으면 글자 폭이 달라지므로 캐시를 비우고, 이미 채워진 칸을 다시 잰다
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => {
   _chW = 0;
@@ -3192,6 +3199,13 @@ function onBlankKey(e) {
   const idx = Number(inp.dataset.i);
   if (bs.locked.has(idx)) return;
 
+  // ⇧Enter = 정답으로 인정: 지금 칸이 오답 판정 상태면 그 답을, 아니면 방금 공개된 칸의 내 답을
+  if (e.shiftKey) {
+    if (inp.classList.contains('ng') && bs.lastWrong.has(idx)) { acceptBlank(idx); return; }
+    if (bs.lastReveal) { acceptRevealed(); return; }
+  }
+  bs.lastReveal = null;      // 다른 칸을 풀기 시작했으면 앞 칸의 '인정' 기회는 지나간 것으로 본다
+
   if (!inp.value.trim()) {          // 비워둔 채 Enter → 이 칸은 포기, 정답을 보여준다
     revealBlank(inp, idx);
     return;
@@ -3238,13 +3252,7 @@ function hintWithAccept(idx, typed) {
   el.className = 'ng';
   el.innerHTML = '';
   el.append(document.createTextNode('고쳐서 다시 시도 · 그대로 Enter → 정답 보기 · '));
-  const b = document.createElement('button');
-  b.type = 'button';
-  b.className = 'link-btn';
-  b.textContent = `"${typed.length > 24 ? typed.slice(0, 24) + '…' : typed}" 정답으로 인정`;
-  b.addEventListener('mousedown', e => e.preventDefault());
-  b.addEventListener('click', () => acceptBlank(idx));
-  el.append(b);
+  el.append(acceptBtn(typed, () => acceptBlank(idx)));
 }
 
 /** 빈칸 하나의 오답 판정을 뒤집어 정답 처리 */
@@ -3275,6 +3283,9 @@ function acceptBlank(idx) {
 }
 /** 빈칸 하나를 포기하고 정답 공개 — 오답으로 기록되고 다음 라운드에 다시 나온다 */
 function revealBlank(inp, idx) {
+  // 같은 오답으로 Enter 를 다시 눌러 공개한 경우, 그 답을 나중에라도 인정할 수 있게 남겨 둔다
+  const typed = inp.value.trim() ? inp.value : '';
+  bs.lastReveal = typed ? { idx, typed } : null;
   inp.value = oneLine(inp.dataset.a);
   growBlank(inp);
   inp.disabled = true;
@@ -3295,6 +3306,54 @@ function revealBlank(inp, idx) {
   const nxt = bs.inputs.find(i => !i.disabled);
   if (nxt) focusBlank(nxt);
   else finishBlankCard(true);
+  if (bs.lastReveal) hintRevealAccept();
+}
+/** 공개된 칸에 대해 "내 답을 정답으로 인정" 안내 */
+function hintRevealAccept() {
+  const r = bs.lastReveal;
+  if (!r) return;
+  const el = $('inline-hint');
+  el.className = 'ng';
+  el.innerHTML = '';
+  el.append(document.createTextNode('정답을 공개했습니다 · '));
+  el.append(acceptBtn(r.typed, () => acceptRevealed()));
+}
+function acceptBtn(typed, onClick) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'link-btn';
+  b.textContent = `"${typed.length > 24 ? typed.slice(0, 24) + '…' : typed}" 정답으로 인정 (⇧Enter)`;
+  b.addEventListener('mousedown', e => e.preventDefault());
+  b.addEventListener('click', onClick);
+  return b;
+}
+/** 공개된 칸을 내 답으로 정답 처리 — 채점기가 틀렸다고 해서 Enter 로 답을 본 경우 */
+function acceptRevealed() {
+  const r = bs.lastReveal;
+  bs.lastReveal = null;
+  if (!r) return;
+  const inp = bs.inputs.find(i => Number(i.dataset.i) === r.idx);
+  if (!inp || !bs.revealed.has(r.idx)) return;
+  bs.wrong.delete(r.idx);
+  bs.revealed.delete(r.idx);
+  recordOverride(currentCardId);     // 틀렸던 입력
+  recordOverride(currentCardId);     // 같은 답으로 다시 눌러 공개한 것
+  overrideBlank(currentCardId, r.idx);
+  inp.value = oneLine(r.typed);
+  inp.classList.remove('revealed');
+  inp.classList.add('ok');
+  growBlank(inp);
+  if (bs.wrong.size) nextRoundMap.set(currentCardId, new Set(bs.wrong));
+  else nextRoundMap.delete(currentCardId);
+  isRetryMode = bs.wrong.size > 0;
+  $('badge-retry').hidden = !isRetryMode;
+  hint('ok', '정답으로 인정');
+  updateBlankBadge();
+  saveProgress();
+  toast('정답으로 처리했습니다', 'good');
+  if (bs.inputs.some(i => !i.disabled)) return;     // 아직 풀 칸이 남았으면 그대로 이어서 푼다
+  finishBlankCard(bs.wrong.size > 0);
+  advance();                 // 마지막 칸이었으면 '인정' 버튼처럼 바로 다음 문제로
 }
 
 /**
@@ -3637,6 +3696,7 @@ document.addEventListener('keydown', e => {
   if (a === $('answer-input') || bs.inputs.includes(a)) return;
   e.preventDefault();                  // 포커스된 '다음 문제' 버튼이 Enter 로 따로 눌리지 않게 한다
   if (!takeEnter(e)) return;
+  if (e.shiftKey && bs.lastReveal) { acceptRevealed(); return; }
   advance();
 });
 
