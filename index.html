@@ -3267,8 +3267,10 @@ function submitBlank(inp, shift) {
   if (shift) {
     if (inp.classList.contains('ng') && bs.lastWrong.has(idx)) { acceptBlank(idx); return; }
     if (bs.lastReveal) { acceptRevealed(); return; }
+    if (bs.lastFix) { acceptFixed(); return; }
   }
   bs.lastReveal = null;      // 다른 칸을 풀기 시작했으면 앞 칸의 '인정' 기회는 지나간 것으로 본다
+  bs.lastFix = null;
 
   if (!inp.value.trim()) {          // 비워둔 채 Enter → 이 칸은 포기, 정답을 보여준다
     revealBlank(inp, idx);
@@ -3286,17 +3288,25 @@ function submitBlank(inp, shift) {
     inp.disabled = true;
     bs.locked.add(idx);
     record(currentCardId, true);
-    recordBlank(currentCardId, idx, !bs.wrong.has(idx));
-    hint('ok', '정답');
+    const fixed = bs.wrong.has(idx);   // 틀렸다가 고쳐서 맞힘 → 이 칸은 다음 라운드에 다시 나온다
+    recordBlank(currentCardId, idx, !fixed);
+    bs.lastFix = fixed ? { idx, tries: (bs.tries && bs.tries.get(idx)) || 1 } : null;
+    if (fixed) hintFixed();
+    else hint('ok', '정답');
     updateBlankBadge();
     saveProgress();                  // 빈칸 하나 맞힐 때마다 저장 — 새로고침해도 이 칸부터 이어진다
     const nxt = bs.inputs.find(i => !i.disabled);
     if (nxt) focusBlank(nxt);
-    else finishBlankCard(bs.wrong.size > 0);
+    else {
+      finishBlankCard(bs.wrong.size > 0);
+      if (bs.lastFix) hintFixed();     // finishBlankCard 가 안내 줄을 비우므로 다시 띄운다
+    }
   } else {
     inp.classList.add('ng');
     bs.lastWrong.set(idx, normBlank(inp.value));
     bs.wrong.add(idx);
+    if (!bs.tries) bs.tries = new Map();
+    bs.tries.set(idx, (bs.tries.get(idx) || 0) + 1);
     isRetryMode = true;
     $('badge-retry').hidden = false;
     nextRoundMap.set(currentCardId, new Set(bs.wrong));
@@ -3407,6 +3417,41 @@ function revealBlank(inp, idx) {
   } else finishBlankCard(true);
   if (bs.lastReveal) hintRevealAccept();
 }
+/** 틀렸다가 고쳐서 맞힌 칸: 정답이지만 다음 라운드에 다시 나온다는 안내 + 정답 처리 버튼 */
+function hintFixed() {
+  const el = $('inline-hint');
+  el.className = 'ok';
+  el.innerHTML = '';
+  el.append(document.createTextNode('정답이지만 앞에서 틀려서 다음 라운드에 다시 나와요 · '));
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'link-btn';
+  b.textContent = '정답으로 처리 (⇧Enter)';
+  b.addEventListener('mousedown', e => e.preventDefault());
+  b.addEventListener('click', () => acceptFixed());
+  el.append(b);
+}
+/** 고쳐서 맞힌 칸을 '처음부터 맞힌 것' 으로 — 다음 라운드에 다시 내지 않는다 */
+function acceptFixed() {
+  const f = bs.lastFix;
+  bs.lastFix = null;
+  if (!f || !bs.wrong.has(f.idx) || bs.revealed.has(f.idx)) return;
+  bs.wrong.delete(f.idx);
+  for (let k = 0; k < f.tries; k++) recordOverride(currentCardId);   // 앞서 틀렸던 입력들
+  overrideBlank(currentCardId, f.idx);
+  if (bs.wrong.size) nextRoundMap.set(currentCardId, new Set(bs.wrong));
+  else nextRoundMap.delete(currentCardId);
+  isRetryMode = bs.wrong.size > 0;
+  $('badge-retry').hidden = !isRetryMode;
+  hint('ok', '정답으로 처리했습니다');
+  updateMeter();
+  saveProgress();
+  toast('정답으로 처리했습니다', 'good');
+  if (bs.inputs.some(i => !i.disabled)) return;     // 풀 칸이 남았으면 그대로 이어서 푼다
+  finishBlankCard(bs.wrong.size > 0);
+  advance();                 // 마지막 칸이었으면 바로 다음 문제로
+}
+
 /** 정답을 공개한 칸에 머문다. 입력칸은 잠겨서 포커스를 못 받으므로 빈칸 영역이 대신 받는다 */
 function holdOnReveal() {
   bs.hold = true;
@@ -3877,6 +3922,7 @@ document.addEventListener('keydown', e => {
   if (!takeEnter(e)) return;
   if (!nextReady()) return;
   if (e.shiftKey && bs.lastReveal) { acceptRevealed(); return; }
+  if (e.shiftKey && bs.lastFix) { acceptFixed(); return; }
   advance();
 });
 
