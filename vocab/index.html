@@ -1,0 +1,1871 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>영단어 플래시카드</title>
+<script>
+  /* 테마를 페인트 이전에 확정해 깜빡임 방지 */
+  (function () {
+    try {
+      var t = localStorage.getItem('vc_theme');
+      if (!t) t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', t);
+    } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); }
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
+<!-- 라이브러리는 레포에 내장한다 (vendor/). pdf.js 는 PDF 를 처음 올릴 때만 불러온다 -->
+<script src="../vendor/diff.min.js" defer></script>
+<script src="vocabpdf.js"></script>
+<style>
+/* ============================================================
+   디자인 토큰 — 코드 플래시카드와 같은 값
+   ============================================================ */
+:root {
+  color-scheme: light;
+  --ink-1: #14161f;
+  --ink-2: #4b5164;
+  --ink-3: #7c8296;
+  --ink-4: #a7adbe;
+  --line: rgba(20, 22, 31, 0.10);
+  --line-strong: rgba(20, 22, 31, 0.18);
+  --panel: rgba(255, 255, 255, 0.62);
+  --panel-solid: #ffffff;
+  --raise: rgba(255, 255, 255, 0.72);
+  --sunken: rgba(20, 22, 31, 0.05);
+  --accent: #4f46e5;
+  --accent-soft: rgba(79, 70, 229, 0.12);
+  --accent-ink: #4338ca;
+  --core: #2e75b6;
+  --core-soft: rgba(46, 117, 182, 0.13);
+  --good: #0f9d6e;
+  --good-soft: rgba(15, 157, 110, 0.13);
+  --warn: #c2740a;
+  --warn-soft: rgba(194, 116, 10, 0.13);
+  --bad: #d63a3a;
+  --bad-soft: rgba(214, 58, 58, 0.12);
+  --star: #d99e0b;
+  --amb-1: #dfe4f5;
+  --amb-2: #eef0f7;
+  --amb-3: #cfd9f0;
+  --amb-4: #e8e2f3;
+  --shadow: 0 24px 60px -28px rgba(20, 22, 31, 0.35);
+  --r-lg: 26px;
+  --r-md: 16px;
+  --r-sm: 10px;
+  --blank-w: 128px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ink-1: #f2f4fa; --ink-2: #b3b9cc; --ink-3: #838a9f; --ink-4: #626879;
+    --line: rgba(255, 255, 255, 0.10); --line-strong: rgba(255, 255, 255, 0.18);
+    --panel: rgba(22, 24, 34, 0.55); --panel-solid: #171922;
+    --raise: rgba(255, 255, 255, 0.06); --sunken: rgba(0, 0, 0, 0.26);
+    --accent: #8b85ff; --accent-soft: rgba(139, 133, 255, 0.16); --accent-ink: #a9a4ff;
+    --core: #6fb2ec; --core-soft: rgba(111, 178, 236, 0.15);
+    --good: #45d6a3; --good-soft: rgba(69, 214, 163, 0.14);
+    --warn: #e5a13a; --warn-soft: rgba(229, 161, 58, 0.14);
+    --bad: #ff7070; --bad-soft: rgba(255, 112, 112, 0.14);
+    --star: #fbbf24;
+    --amb-1: #0b0d16; --amb-2: #10131f; --amb-3: #131a33; --amb-4: #1a1430;
+    --shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.75);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink-1: #f2f4fa; --ink-2: #b3b9cc; --ink-3: #838a9f; --ink-4: #626879;
+  --line: rgba(255, 255, 255, 0.10); --line-strong: rgba(255, 255, 255, 0.18);
+  --panel: rgba(22, 24, 34, 0.55); --panel-solid: #171922;
+  --raise: rgba(255, 255, 255, 0.06); --sunken: rgba(0, 0, 0, 0.26);
+  --accent: #8b85ff; --accent-soft: rgba(139, 133, 255, 0.16); --accent-ink: #a9a4ff;
+  --core: #6fb2ec; --core-soft: rgba(111, 178, 236, 0.15);
+  --good: #45d6a3; --good-soft: rgba(69, 214, 163, 0.14);
+  --warn: #e5a13a; --warn-soft: rgba(229, 161, 58, 0.14);
+  --bad: #ff7070; --bad-soft: rgba(255, 112, 112, 0.14);
+  --star: #fbbf24;
+  --amb-1: #0b0d16; --amb-2: #10131f; --amb-3: #131a33; --amb-4: #1a1430;
+  --shadow: 0 30px 70px -30px rgba(0, 0, 0, 0.75);
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0; min-height: 100dvh;
+  font-family: 'IBM Plex Sans KR', system-ui, -apple-system, sans-serif;
+  color: var(--ink-1); background: var(--amb-2);
+  -webkit-font-smoothing: antialiased; overflow-x: hidden;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; border: none; background: none; }
+::selection { background: var(--accent-soft); }
+#ambient {
+  position: fixed; inset: -10%; z-index: -2; pointer-events: none;
+  background:
+    radial-gradient(46% 38% at 14% 12%, var(--amb-3) 0%, transparent 62%),
+    radial-gradient(40% 44% at 88% 20%, var(--amb-4) 0%, transparent 64%),
+    radial-gradient(56% 46% at 62% 96%, var(--amb-3) 0%, transparent 68%),
+    linear-gradient(168deg, var(--amb-1) 0%, var(--amb-2) 55%, var(--amb-1) 100%);
+}
+
+/* ============================================================
+   레이아웃
+   ============================================================ */
+.app { position: relative; max-width: 1240px; margin: 0 auto; padding: 30px 26px 56px; min-height: 100dvh; }
+.topbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 26px; }
+.brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; min-width: 0; }
+.brand h1 { margin: 0; font-size: 21px; font-weight: 700; letter-spacing: -0.02em; }
+.brand .sep { width: 4px; height: 4px; border-radius: 50%; background: var(--ink-4); align-self: center; }
+.brand .deck-name { font-size: 15px; font-weight: 500; color: var(--ink-2); }
+.brand .deck-sub { font-size: 13px; color: var(--ink-4); }
+.topbar-actions { display: flex; align-items: center; gap: 8px; }
+.top-link { font-size: 12.5px; font-weight: 600; color: var(--ink-3); text-decoration: none; padding: 7px 10px; border-radius: 9px; }
+.top-link:hover { background: var(--accent-soft); color: var(--accent-ink); }
+
+.layout { display: grid; grid-template-columns: 284px minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 980px) {
+  .layout { grid-template-columns: 1fr; }
+  .app { padding: 22px 16px 44px; }
+  .stage { order: -1; }          /* 휴대폰에서는 문제가 먼저 */
+}
+.panel {
+  position: relative; border-radius: var(--r-lg);
+  background: var(--panel);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5); backdrop-filter: blur(20px) saturate(1.5);
+  box-shadow: var(--shadow);
+}
+.panel::after { content: ''; position: absolute; inset: 0; border-radius: inherit; border: 1px solid var(--line); pointer-events: none; }
+.panel-body { position: relative; padding: 20px; }
+.rail { position: sticky; top: 20px; }
+@media (min-width: 981px) {
+  .rail { max-height: calc(100dvh - 40px); display: flex; flex-direction: column; }
+  .rail > .panel-body { min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+}
+@media (max-width: 980px) { .rail { position: static; } }
+
+/* ============================================================
+   레일
+   ============================================================ */
+.rail-group + .rail-group { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+.rail-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: var(--ink-4); margin-bottom: 10px; }
+.deck-row { display: flex; gap: 6px; align-items: center; }
+.select, .mini-select {
+  appearance: none; -webkit-appearance: none;
+  border: 1px solid var(--line); background-color: var(--raise);
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink-3) 50%), linear-gradient(135deg, var(--ink-3) 50%, transparent 50%);
+  background-repeat: no-repeat; outline: none;
+}
+.select {
+  flex: 1; min-width: 0; padding: 9px 30px 9px 12px; border-radius: var(--r-sm);
+  background-position: calc(100% - 16px) center, calc(100% - 11px) center; background-size: 5px 5px, 5px 5px;
+  font-size: 13.5px; font-weight: 600; text-overflow: ellipsis;
+}
+.mini-select {
+  padding: 5px 22px 5px 9px; border-radius: 8px;
+  background-position: calc(100% - 12px) center, calc(100% - 8px) center; background-size: 4px 4px, 4px 4px;
+  font-size: 11.5px; font-weight: 600; color: var(--ink-2);
+}
+.select:focus-visible, .mini-select:focus-visible { border-color: var(--accent); }
+.icon-btn {
+  width: 32px; height: 32px; flex: 0 0 auto; display: grid; place-items: center;
+  border-radius: 9px; border: 1px solid var(--line); background: var(--raise); color: var(--ink-2);
+  transition: background .16s, color .16s, transform .16s;
+}
+.icon-btn:hover { background: var(--accent-soft); color: var(--accent-ink); }
+.icon-btn:active { transform: scale(0.93); }
+.icon-btn.danger:hover { background: var(--bad-soft); color: var(--bad); }
+.icon-btn svg { width: 15px; height: 15px; }
+
+.meter-top { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; gap: 8px; }
+.meter-round { font-size: 19px; font-weight: 700; letter-spacing: -0.02em; }
+.meter-round small { font-size: 12px; font-weight: 500; color: var(--ink-3); margin-left: 6px; }
+.meter-pct { font-size: 12.5px; font-weight: 600; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.bar { height: 5px; border-radius: 99px; background: var(--sunken); overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--good)); transition: width .5s cubic-bezier(.22,1,.36,1); }
+.meter-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7px; margin-top: 12px; }
+.stat-box { padding: 8px 10px; border-radius: var(--r-sm); background: var(--raise); border: 1px solid var(--line); }
+.stat-box b { display: block; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.stat-box span { font-size: 10.5px; color: var(--ink-3); }
+
+.seg { display: flex; gap: 3px; padding: 3px; border-radius: 10px; background: var(--sunken); }
+.seg button { flex: 1; padding: 7px 4px; border-radius: 7px; font-size: 12px; font-weight: 600; color: var(--ink-3); transition: background .15s, color .15s; white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--panel-solid); color: var(--ink-1); box-shadow: 0 2px 6px -2px rgba(0,0,0,.28); }
+.seg button:disabled { opacity: .35; cursor: default; }
+.seg-note { font-size: 11px; color: var(--ink-4); margin-top: 6px; min-height: 1em; }
+
+.toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; font-size: 12.5px; color: var(--ink-2); }
+.switch { position: relative; width: 38px; height: 21px; flex: 0 0 auto; border-radius: 99px; background: var(--sunken); border: 1px solid var(--line); transition: background .2s; }
+.switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%; background: var(--ink-3); transition: transform .24s cubic-bezier(.34,1.56,.64,1), background .2s; }
+.switch[aria-checked="true"] { background: var(--accent-soft); border-color: transparent; }
+.switch[aria-checked="true"]::after { transform: translateX(17px); background: var(--accent); }
+
+.rail-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.act {
+  display: flex; align-items: center; gap: 7px; padding: 9px 11px; border-radius: var(--r-sm);
+  border: 1px solid var(--line); background: var(--raise);
+  font-size: 12.5px; font-weight: 600; color: var(--ink-2); text-align: left;
+  transition: background .16s, color .16s, border-color .16s, transform .16s;
+}
+.act:hover { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; }
+.act:active { transform: translateY(1px); }
+.act svg { width: 14px; height: 14px; flex: 0 0 auto; opacity: .75; }
+.act.wide { grid-column: 1 / -1; }
+.act.primary { background: var(--accent); color: #fff; border-color: transparent; }
+.act.primary:hover { background: var(--accent-ink); color: #fff; }
+.save-note { font-size: 11px; color: var(--ink-4); margin-top: 14px; line-height: 1.5; }
+
+/* ============================================================
+   학습 화면
+   ============================================================ */
+.stage .panel-body { padding: 24px 26px 26px; min-height: 540px; display: flex; flex-direction: column; }
+@media (max-width: 560px) { .stage .panel-body { padding: 18px 16px; min-height: 0; } }
+.badges { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-bottom: 18px; min-height: 26px; }
+.badge {
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 99px;
+  font-size: 11.5px; font-weight: 600; letter-spacing: -0.01em;
+  background: var(--raise); border: 1px solid var(--line); color: var(--ink-2);
+}
+.badge.accent { background: var(--accent-soft); color: var(--accent-ink); border-color: transparent; }
+.badge.core { background: var(--core-soft); color: var(--core); border-color: transparent; }
+.badge.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+.badge.pos { font-family: 'Source Serif 4', Georgia, serif; font-style: italic; font-size: 12.5px; }
+.badges .grow { flex: 1; }
+.star-btn { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; color: var(--ink-4); transition: color .15s, transform .15s, background .15s; }
+.star-btn:hover { color: var(--star); background: var(--sunken); transform: scale(1.08); }
+.star-btn.on { color: var(--star); }
+.star-btn svg { width: 18px; height: 18px; }
+.star-btn.on svg { fill: currentColor; }
+.speak-btn { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; color: var(--ink-3); }
+.speak-btn:hover { color: var(--accent-ink); background: var(--sunken); }
+.speak-btn svg { width: 17px; height: 17px; }
+
+.field-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: var(--ink-4); margin-bottom: 8px; display: block; }
+.meaning {
+  padding: 18px 20px; margin-bottom: 16px; border-radius: var(--r-md);
+  background: var(--accent-soft); border-left: 3px solid var(--accent);
+}
+.meaning .en { font-family: 'Source Serif 4', Georgia, serif; font-size: 21px; line-height: 1.5; letter-spacing: -0.005em; }
+.meaning .ko { margin-top: 8px; font-size: 14px; color: var(--ink-2); }
+.meaning .ko[hidden] { display: none; }
+.sentence {
+  padding: 20px 22px; border-radius: var(--r-md); background: var(--raise); border: 1px solid var(--line);
+  font-family: 'Source Serif 4', Georgia, serif; font-size: 19px; line-height: 2.05; word-break: break-word;
+}
+.sentence:focus { outline: none; }
+.solo { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 14px; color: var(--ink-3); }
+.blank-input {
+  display: inline-block; vertical-align: baseline;
+  width: var(--blank-w); max-width: 100%; padding: 0 8px; margin: 0 4px;
+  background: var(--accent-soft); border: none; border-bottom: 2px solid var(--accent);
+  border-radius: 6px 6px 0 0; color: var(--ink-1); caret-color: var(--accent);
+  font-family: 'Source Serif 4', Georgia, serif; font-size: 19px; line-height: 1.55; outline: none;
+  transition: background .15s, border-color .15s;
+}
+.blank-input::placeholder { color: var(--ink-4); }
+.blank-input:focus { border-bottom-color: var(--accent-ink); box-shadow: 0 6px 16px -10px var(--accent); }
+.blank-input.ng { background: var(--bad-soft); border-bottom-color: var(--bad); color: var(--bad); }
+.blank-input.ok { background: var(--good-soft); border-bottom-color: var(--good); color: var(--good); font-weight: 600; }
+.blank-input.revealed { background: var(--warn-soft); border-bottom-color: var(--warn); color: var(--warn); font-weight: 600; }
+.blank-input:disabled { opacity: 1; -webkit-text-fill-color: currentColor; }
+.blank-mask {
+  display: inline-block; min-width: 72px; padding: 0 8px; margin: 0 4px; text-align: center;
+  border-bottom: 2px dashed var(--line-strong); color: transparent; border-radius: 6px 6px 0 0; background: var(--sunken);
+}
+.blank-mask.shown { color: inherit; background: var(--good-soft); border-bottom: 2px solid var(--good); font-weight: 600; }
+.sentence.done .blank-mask.shown.rv { background: var(--warn-soft); border-bottom-color: var(--warn); }
+.sentence-note { font-size: 12px; color: var(--warn); margin-top: 8px; }
+
+#inline-hint { font-size: 12.5px; min-height: 1.6em; margin-top: 10px; font-weight: 600; line-height: 1.7; }
+#inline-hint.ok { color: var(--good); }
+#inline-hint.ng { color: var(--bad); }
+#inline-hint.warn { color: var(--warn); }
+.link-btn { color: var(--accent-ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; padding: 0 2px; }
+.link-btn:hover { color: var(--accent); }
+.hint-diff-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; align-items: baseline; margin: 2px 0 6px; }
+.hint-diff-label { color: var(--ink-3); font-weight: 600; font-size: 11.5px; }
+.hint-diff { justify-self: start; max-width: 100%; padding: 2px 9px; border-radius: 6px; background: var(--sunken); color: var(--ink-1); font: 600 14px/1.6 'Source Serif 4', Georgia, serif; overflow-wrap: anywhere; }
+.hint-diff .hd-del { background: var(--bad-soft); color: var(--bad); text-decoration: line-through; border-radius: 3px; }
+.hint-diff .hd-add { background: var(--good-soft); color: var(--good); border-radius: 3px; }
+
+.feedback { margin-top: 16px; padding: 16px 18px; border-radius: var(--r-md); border: 1px solid var(--line); animation: rise .3s cubic-bezier(.22,1,.36,1) both; }
+.feedback.good { background: var(--good-soft); border-color: transparent; }
+.feedback.bad { background: var(--bad-soft); border-color: transparent; }
+.feedback.warn { background: var(--warn-soft); border-color: transparent; }
+.feedback-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.feedback-head h3 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
+.feedback.good h3 { color: var(--good); }
+.feedback.bad h3 { color: var(--bad); }
+.feedback.warn h3 { color: var(--warn); }
+.fb-word { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.fb-word .w { font-family: 'Source Serif 4', Georgia, serif; font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
+.fb-word .p { font-family: 'Source Serif 4', Georgia, serif; font-style: italic; color: var(--ink-3); }
+.fb-word .k { font-size: 15px; color: var(--ink-1); font-weight: 600; }
+.fb-def { margin-top: 4px; font-size: 13px; color: var(--ink-2); }
+.fb-desc { margin-top: 8px; font-size: 12.5px; color: var(--ink-2); }
+.fb-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip-btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--raise); font-size: 12px; font-weight: 600; color: var(--ink-2);
+  transition: background .15s, color .15s;
+}
+.chip-btn:hover { background: var(--accent-soft); color: var(--accent-ink); }
+.chip-btn svg { width: 13px; height: 13px; }
+.chip-btn.good:hover { background: var(--good-soft); color: var(--good); }
+
+.spacer { flex: 1; min-height: 16px; }
+.stage-actions { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 13px 22px; border-radius: 14px;
+  font-size: 15px; font-weight: 700; letter-spacing: -0.01em; white-space: nowrap;
+  transition: transform .16s cubic-bezier(.34,1.56,.64,1), background .16s, box-shadow .16s;
+}
+.btn:active { transform: scale(.975); }
+.btn:focus-visible, .act:focus-visible, .chip-btn:focus-visible, .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn-next:focus-visible { outline-color: var(--good); }
+.btn.grow { flex: 1; }
+.btn-primary { background: var(--accent); color: #fff; box-shadow: 0 10px 24px -12px var(--accent); }
+.btn-primary:hover { background: var(--accent-ink); }
+.btn-next { background: var(--good); color: #fff; box-shadow: 0 10px 24px -12px var(--good); }
+.btn-next:hover { filter: brightness(1.06); }
+.btn-quiet { background: var(--raise); border: 1px solid var(--line); color: var(--ink-2); font-size: 13.5px; padding: 13px 16px; }
+.btn-quiet:hover { background: var(--sunken); }
+.btn-sm { padding: 9px 16px; border-radius: 11px; font-size: 13px; font-weight: 600; }
+.kbd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; font-weight: 500; padding: 2px 5px; border-radius: 5px; background: rgba(255,255,255,.18); }
+.btn-quiet .kbd, .chip-btn .kbd, .hint .kbd { background: var(--sunken); }
+
+.empty-state { margin: auto 0; text-align: center; padding: 30px 10px; }
+.empty-state h2 { margin: 0 0 8px; font-size: 22px; letter-spacing: -0.02em; }
+.empty-state p { margin: 0 auto 18px; max-width: 460px; font-size: 13.5px; line-height: 1.7; color: var(--ink-3); }
+.empty-state.done h2 { color: var(--accent-ink); }
+.drop-zone {
+  border: 1.5px dashed var(--line-strong); border-radius: var(--r-md); padding: 30px 20px; text-align: center;
+  transition: background .18s, border-color .18s; cursor: pointer;
+}
+.drop-zone.over, body.dragging .drop-zone { border-color: var(--accent); background: var(--accent-soft); }
+.drop-zone h4 { margin: 10px 0 4px; font-size: 14.5px; font-weight: 700; }
+.drop-zone p { margin: 0; font-size: 12.5px; color: var(--ink-3); }
+.drop-zone svg { width: 30px; height: 30px; color: var(--ink-4); }
+
+/* ============================================================
+   모달
+   ============================================================ */
+.modal {
+  position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 22px;
+  background: rgba(8, 9, 14, 0.55); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  animation: fadein .2s ease both;
+}
+@media (max-width: 560px) { .modal { padding: 10px; } }
+@keyframes fadein { from { opacity: 0 } to { opacity: 1 } }
+.sheet {
+  width: 100%; max-width: 980px; max-height: 90dvh; display: flex; flex-direction: column; overflow: hidden;
+  border-radius: 22px; border: 1px solid var(--line-strong); background: var(--panel-solid);
+  box-shadow: 0 40px 90px -30px rgba(0,0,0,.6); animation: pop .26s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes pop { from { opacity: 0; transform: translateY(12px) scale(.985); } to { opacity: 1; transform: none; } }
+.sheet.sm { max-width: 460px; }
+.sheet.md { max-width: 680px; }
+.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 17px 20px; border-bottom: 1px solid var(--line); flex: 0 0 auto; }
+.sheet-head h3 { margin: 0; font-size: 15.5px; font-weight: 700; letter-spacing: -0.02em; }
+.sheet-head .sub { font-size: 12px; color: var(--ink-3); margin-top: 3px; }
+.sheet-body { padding: 20px; overflow-y: auto; flex: 1 1 auto; }
+.sheet-foot { display: flex; align-items: center; justify-content: flex-end; gap: 9px; padding: 14px 20px; border-top: 1px solid var(--line); flex: 0 0 auto; flex-wrap: wrap; }
+.sheet-foot .left { margin-right: auto; font-size: 12px; color: var(--ink-3); }
+.dlg-msg { font-size: 13.5px; line-height: 1.65; color: var(--ink-2); white-space: pre-wrap; }
+.text-input, .text-area {
+  width: 100%; padding: 9px 12px; border-radius: 9px; border: 1px solid var(--line); background: var(--sunken);
+  font-size: 13.5px; outline: none;
+}
+.text-area { min-height: 80px; resize: vertical; line-height: 1.6; }
+.text-input:focus, .text-area:focus { border-color: var(--accent); }
+.ctl-label { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-4); margin-bottom: 6px; display: block; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-grid .full { grid-column: 1 / -1; }
+@media (max-width: 560px) { .form-grid { grid-template-columns: 1fr; } }
+.check-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); }
+.check-row input { width: 16px; height: 16px; accent-color: var(--accent); }
+
+/* 가져오기 미리보기 */
+.imp-summary { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
+.imp-controls { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 12px; margin-bottom: 14px; }
+@media (max-width: 640px) { .imp-controls { grid-template-columns: 1fr; } }
+.imp-list { display: flex; flex-direction: column; gap: 6px; }
+.imp-item { display: flex; gap: 11px; padding: 11px 13px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--sunken); }
+.imp-item.off { opacity: .45; }
+.imp-item .cb { flex: 0 0 auto; margin-top: 3px; width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+.imp-item .body { min-width: 0; flex: 1; }
+.imp-item .t { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.imp-item .t b { font-family: 'Source Serif 4', Georgia, serif; font-size: 16px; }
+.imp-item .t i { font-family: 'Source Serif 4', Georgia, serif; color: var(--ink-3); }
+.imp-item .d { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+.imp-item .s { font-family: 'Source Serif 4', Georgia, serif; font-size: 13.5px; color: var(--ink-2); margin-top: 4px; line-height: 1.55; }
+mark.ans { background: var(--accent-soft); color: var(--accent-ink); border-radius: 4px; padding: 0 2px; font-weight: 600; }
+.tag { font-size: 10px; font-weight: 700; letter-spacing: .04em; padding: 2px 6px; border-radius: 5px; background: var(--sunken); color: var(--ink-3); }
+.tag.core { background: var(--core-soft); color: var(--core); }
+.tag.warn { background: var(--warn-soft); color: var(--warn); }
+.progress-line { font-size: 13px; color: var(--ink-3); padding: 18px 0; text-align: center; }
+
+/* 단어 목록 */
+.list-tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.list-tools .text-input { flex: 1 1 200px; width: auto; }
+.list-tools .seg { flex: 0 1 auto; }
+.wl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.wl th { text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-4); padding: 6px 8px; border-bottom: 1px solid var(--line-strong); position: sticky; top: -20px; background: var(--panel-solid); }
+.wl td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.wl tr:hover td { background: var(--sunken); }
+.wl .w { font-family: 'Source Serif 4', Georgia, serif; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.wl .w.core { color: var(--core); }
+.wl .p { font-family: 'Source Serif 4', Georgia, serif; font-style: italic; color: var(--ink-3); white-space: nowrap; }
+.wl .def { color: var(--ink-2); min-width: 180px; }
+.wl .def small { display: block; color: var(--ink-3); font-size: 12px; margin-top: 2px; }
+.wl .rate { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 600; }
+.wl .rate small { color: var(--ink-4); font-weight: 500; font-size: 11px; }
+.wl .ops { white-space: nowrap; text-align: right; }
+.wl .star-btn { width: 26px; height: 26px; }
+.wl .star-btn svg { width: 15px; height: 15px; }
+@media (max-width: 640px) { .wl .hide-sm { display: none; } }
+
+/* 단어 편집 — 예문에서 빈칸 고르기 */
+.tok-pick { padding: 12px 14px; border-radius: var(--r-sm); background: var(--sunken); font-family: 'Source Serif 4', Georgia, serif; font-size: 16px; line-height: 2; }
+.tok-pick .tok { cursor: pointer; border-radius: 4px; transition: background .12s, box-shadow .12s; }
+.tok-pick .tok:hover { background: var(--accent-soft); }
+.tok-pick .tok.on { background: var(--accent); color: #fff; box-shadow: 0 0 0 2px var(--accent); }
+.hint { font-size: 11.5px; color: var(--ink-4); line-height: 1.6; }
+
+/* 토스트 */
+#toasts { position: fixed; z-index: 80; left: 50%; bottom: 28px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+.toast { padding: 11px 18px; border-radius: 12px; background: var(--panel-solid); border: 1px solid var(--line-strong); box-shadow: 0 18px 40px -16px rgba(0,0,0,.5); font-size: 13px; font-weight: 600; animation: toastin .3s cubic-bezier(.22,1,.36,1) both; }
+.toast.good { color: var(--good); }
+.toast.bad { color: var(--bad); }
+@keyframes toastin { from { opacity: 0; transform: translateY(14px) } to { opacity: 1; transform: none } }
+.toast.out { animation: toastout .25s ease forwards; }
+@keyframes toastout { to { opacity: 0; transform: translateY(8px) } }
+.shake { animation: shake .35s cubic-bezier(.36,.07,.19,.97) both; }
+@keyframes shake { 0%,100%{transform:translateX(0)} 15%,45%,75%{transform:translateX(-5px)} 30%,60%,90%{transform:translateX(5px)} }
+@keyframes rise { from { opacity: 0; transform: translateY(-7px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; } }
+</style>
+</head>
+<body>
+<div id="ambient" aria-hidden="true"></div>
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <h1>영단어 플래시카드</h1>
+      <i class="sep"></i>
+      <span class="deck-name" id="brand-deck"></span>
+      <span class="deck-sub" id="brand-sub"></span>
+    </div>
+    <div class="topbar-actions">
+      <a class="top-link" href="../">코드 플래시카드 →</a>
+      <button class="icon-btn" id="theme-btn" title="테마 전환" aria-label="테마 전환"></button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- ── 레일 ───────────────────────────────────────── -->
+    <aside class="panel rail">
+      <div class="panel-body">
+        <div class="rail-group">
+          <div class="rail-label">단어장</div>
+          <div class="deck-row">
+            <select class="select" id="deck-select" aria-label="단어장 선택"></select>
+            <button class="icon-btn" id="deck-rename" title="이름 바꾸기" aria-label="이름 바꾸기">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            </button>
+            <button class="icon-btn danger" id="deck-delete" title="단어장 삭제" aria-label="단어장 삭제">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="rail-group">
+          <div class="meter">
+            <div class="meter-top">
+              <div class="meter-round" id="round-label">—</div>
+              <div class="meter-pct" id="meter-pct">0%</div>
+            </div>
+            <div class="bar"><i id="meter-bar"></i></div>
+            <div class="meter-stats">
+              <div class="stat-box"><b id="st-left">0</b><span>남은 단어</span></div>
+              <div class="stat-box"><b id="st-wrong">0</b><span>이번 오답</span></div>
+              <div class="stat-box"><b id="st-acc">—</b><span>전체 정답률</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rail-group">
+          <div class="rail-label">출제 범위</div>
+          <div class="seg" id="scope-seg">
+            <button type="button" data-v="all" aria-pressed="true">전체</button>
+            <button type="button" data-v="core" title="PDF에서 파란색으로 표시된 핵심 단어">핵심</button>
+            <button type="button" data-v="fav">★</button>
+            <button type="button" data-v="weak" title="한 번이라도 틀린 단어">오답</button>
+          </div>
+          <div class="seg-note" id="scope-note"></div>
+          <div class="toggle-row" style="margin-top:6px">
+            <span>한 세트에</span>
+            <select class="mini-select" id="chunk-select" aria-label="한 세트 단어 수">
+              <option value="0">전부</option>
+              <option value="10">10개</option>
+              <option value="20">20개</option>
+              <option value="30">30개</option>
+              <option value="50">50개</option>
+            </select>
+          </div>
+          <div class="toggle-row"><span>순서 섞기</span><button class="switch" id="opt-shuffle" role="switch" aria-checked="true" aria-label="순서 섞기"></button></div>
+          <div class="toggle-row"><span>첫 글자 힌트</span><button class="switch" id="opt-first" role="switch" aria-checked="false" aria-label="첫 글자 힌트"></button></div>
+          <div class="toggle-row"><span>한국어 뜻도 보기</span><button class="switch" id="opt-ko" role="switch" aria-checked="false" aria-label="한국어 뜻도 보기"></button></div>
+          <div class="toggle-row"><span>정답 후 발음 듣기</span><button class="switch" id="opt-speak" role="switch" aria-checked="false" aria-label="정답 후 발음 듣기"></button></div>
+        </div>
+
+        <div class="rail-group">
+          <div class="rail-actions">
+            <button class="act primary wide" id="btn-import">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M12 18v-6M9 15l3-3 3 3"/></svg>단어장 PDF 올리기</button>
+            <button class="act" id="btn-list">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>단어 목록</button>
+            <button class="act" id="btn-reset">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>처음부터</button>
+            <button class="act" id="btn-export">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5M4 21h16"/></svg>백업 내보내기</button>
+            <button class="act" id="btn-restore">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>백업 불러오기</button>
+          </div>
+          <div class="save-note">단어·진행 상황·통계는 이 브라우저에 자동 저장됩니다. 다른 기기로 옮길 때는 백업을 쓰세요.</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── 학습 화면 ─────────────────────────────────── -->
+    <main class="panel stage" id="stage">
+      <div class="panel-body">
+        <div class="badges" id="badges" hidden>
+          <span class="badge pos" id="b-pos"></span>
+          <span class="badge core" id="b-core" hidden>핵심</span>
+          <span class="badge accent" id="b-progress"></span>
+          <span class="badge bad" id="b-retry" hidden>오답 재도전</span>
+          <span class="grow"></span>
+          <button class="star-btn" id="b-star" title="즐겨찾기" aria-label="즐겨찾기">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.6l2.5 5.2 5.7.8-4.1 4 1 5.7-5.1-2.7-5.1 2.7 1-5.7-4.1-4 5.7-.8z"/></svg>
+          </button>
+          <button class="icon-btn" id="b-edit" title="이 단어 편집" aria-label="이 단어 편집">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
+        </div>
+
+        <div id="quiz" hidden>
+          <span class="field-label">Meaning</span>
+          <div class="meaning">
+            <div class="en" id="q-def"></div>
+            <div class="ko" id="q-ko" hidden></div>
+          </div>
+          <span class="field-label" id="q-sent-label">Fill in the blank</span>
+          <div class="sentence" id="q-sentence"></div>
+          <div class="sentence-note" id="q-note" hidden></div>
+          <div id="inline-hint"></div>
+          <div class="feedback" id="feedback" hidden>
+            <div class="feedback-head"><h3 id="fb-title"></h3></div>
+            <div class="fb-word">
+              <span class="w" id="fb-term"></span>
+              <span class="p" id="fb-pos"></span>
+              <span class="k" id="fb-ko"></span>
+              <button class="speak-btn" id="fb-speak" title="발음 듣기" aria-label="발음 듣기">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>
+              </button>
+            </div>
+            <div class="fb-def" id="fb-def"></div>
+            <div class="fb-desc" id="fb-desc"></div>
+            <div class="fb-actions">
+              <button class="chip-btn" id="fb-speak-sent" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/></svg>예문 듣기</button>
+              <button class="chip-btn good" id="fb-accept" type="button" hidden>정답으로 인정 <span class="kbd">⇧↵</span></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="empty-state" id="empty" hidden>
+          <h2>단어장 PDF를 올려 주세요</h2>
+          <p>단어 · 품사 · 뜻 · 예문이 적힌 단어장 PDF를 올리면 단어를 자동으로 뽑아, <b>영어 뜻풀이</b>를 보고 <b>예문 빈칸</b>에 단어를 채우는 문제로 만들어 줍니다.</p>
+          <div class="drop-zone" id="empty-drop" tabindex="0" role="button" aria-label="PDF 파일 고르기">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M12 18v-6M9 15l3-3 3 3"/></svg>
+            <h4>PDF를 여기로 끌어다 놓거나 클릭해서 고르기</h4>
+            <p>여러 파일을 한 번에 올려도 됩니다</p>
+          </div>
+        </div>
+
+        <div class="empty-state done" id="done" hidden>
+          <h2 id="done-title">모두 외웠습니다</h2>
+          <p id="done-desc"></p>
+          <button class="btn btn-primary" id="btn-again" type="button">다시 시작</button>
+        </div>
+
+        <div class="spacer"></div>
+        <div class="stage-actions" id="actions" hidden>
+          <button class="btn btn-primary grow" id="btn-check" type="button">확인 <span class="kbd">↵</span></button>
+          <button class="btn btn-quiet" id="btn-giveup" type="button">모르겠어요</button>
+          <button class="btn btn-next grow" id="btn-next" type="button" hidden>다음 단어 <span class="kbd">↵</span></button>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ── PDF 가져오기 ─────────────────────────────── -->
+<div class="modal" id="m-import" hidden>
+  <div class="sheet">
+    <div class="sheet-head">
+      <div><h3>단어장 PDF 가져오기</h3><div class="sub" id="imp-sub">PDF에서 단어 · 품사 · 한국어 뜻 · 영어 뜻 · 예문을 뽑습니다</div></div>
+      <button class="icon-btn" data-close aria-label="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <div class="sheet-body">
+      <div id="imp-pick">
+        <div class="drop-zone" id="imp-drop" tabindex="0" role="button" aria-label="PDF 파일 고르기">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M12 18v-6M9 15l3-3 3 3"/></svg>
+          <h4>PDF를 끌어다 놓거나 클릭해서 고르기</h4>
+          <p>예: <i>accumulate v. 축적하다 — to gather or increase something over time</i> / <i>Example: …</i></p>
+        </div>
+        <p class="hint" style="margin-top:12px">예문에서 <b>굵게</b> 표시된 단어가 빈칸이 됩니다. 굵은 표시가 없으면 표제어와 같은 단어(활용형 포함)를 찾아 빈칸으로 만듭니다. 파란색 표제어는 <b>핵심 단어</b>로 표시됩니다. 글자를 선택할 수 없는 스캔 PDF는 읽지 못합니다.</p>
+      </div>
+      <div id="imp-loading" class="progress-line" hidden>PDF 읽는 중…</div>
+      <div id="imp-preview" hidden>
+        <div class="imp-summary" id="imp-summary"></div>
+        <div class="imp-controls">
+          <div><label class="ctl-label" for="imp-name">단어장 이름</label><input class="text-input" id="imp-name"></div>
+          <div><span class="ctl-label">가져올 위치</span>
+            <div class="seg" id="imp-target">
+              <button type="button" data-v="new" aria-pressed="true">새 단어장</button>
+              <button type="button" data-v="cur">현재 단어장에 추가</button>
+            </div>
+          </div>
+        </div>
+        <div class="list-tools">
+          <button class="chip-btn" type="button" id="imp-all">모두 선택</button>
+          <button class="chip-btn" type="button" id="imp-none">모두 해제</button>
+          <span class="hint" id="imp-hint"></span>
+        </div>
+        <div class="imp-list" id="imp-list"></div>
+      </div>
+    </div>
+    <div class="sheet-foot">
+      <span class="left" id="imp-status"></span>
+      <button class="btn btn-quiet btn-sm" data-close type="button">취소</button>
+      <button class="btn btn-primary btn-sm" id="imp-go" type="button" disabled>가져오기</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 단어 목록 ─────────────────────────────── -->
+<div class="modal" id="m-list" hidden>
+  <div class="sheet">
+    <div class="sheet-head">
+      <div><h3>단어 목록</h3><div class="sub" id="list-sub"></div></div>
+      <button class="icon-btn" data-close aria-label="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <div class="sheet-body">
+      <div class="list-tools">
+        <input class="text-input" id="list-q" placeholder="단어 · 뜻 검색" autocomplete="off">
+        <div class="seg" id="list-filter">
+          <button type="button" data-v="all" aria-pressed="true">전체</button>
+          <button type="button" data-v="core">핵심</button>
+          <button type="button" data-v="fav">★</button>
+          <button type="button" data-v="weak">오답</button>
+        </div>
+        <select class="mini-select" id="list-sort" aria-label="정렬">
+          <option value="order">원래 순서</option>
+          <option value="wrong">오답률 높은 순</option>
+          <option value="abc">알파벳 순</option>
+        </select>
+      </div>
+      <table class="wl"><thead><tr><th></th><th>단어</th><th>뜻</th><th class="hide-sm">오답률</th><th></th></tr></thead><tbody id="list-body"></tbody></table>
+    </div>
+    <div class="sheet-foot">
+      <span class="left" id="list-count"></span>
+      <button class="btn btn-quiet btn-sm" id="list-add" type="button">+ 단어 추가</button>
+      <button class="btn btn-primary btn-sm" data-close type="button">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 단어 편집 ─────────────────────────────── -->
+<div class="modal" id="m-edit" hidden>
+  <div class="sheet md">
+    <div class="sheet-head">
+      <div><h3 id="ed-title">단어 편집</h3><div class="sub">예문에서 단어를 눌러 빈칸을 고르세요</div></div>
+      <button class="icon-btn" data-close aria-label="닫기"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <div class="sheet-body">
+      <div class="form-grid">
+        <div><label class="ctl-label" for="ed-term">단어</label><input class="text-input" id="ed-term" autocomplete="off"></div>
+        <div><label class="ctl-label" for="ed-pos">품사</label><input class="text-input" id="ed-pos" placeholder="n. / v. / adj." autocomplete="off"></div>
+        <div class="full"><label class="ctl-label" for="ed-ko">한국어 뜻</label><input class="text-input" id="ed-ko" autocomplete="off"></div>
+        <div class="full"><label class="ctl-label" for="ed-def">영어 뜻 (문제에 보이는 뜻)</label><textarea class="text-area" id="ed-def" rows="2"></textarea></div>
+        <div class="full"><label class="ctl-label" for="ed-ex">예문</label><textarea class="text-area" id="ed-ex" rows="3"></textarea></div>
+        <div class="full">
+          <span class="ctl-label">빈칸 (단어를 눌러 켜고 끄기)</span>
+          <div class="tok-pick" id="ed-pick"></div>
+          <div class="hint" style="margin-top:6px">이어진 단어를 함께 고르면 한 빈칸이 됩니다. 같은 단어가 여러 번 나오면 첫 빈칸에 답을 쓰고 나머지는 정답 후에 채워집니다.</div>
+        </div>
+        <div class="full check-row"><input type="checkbox" id="ed-core"><label for="ed-core">핵심 단어</label></div>
+      </div>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn btn-quiet btn-sm" id="ed-delete" type="button" style="margin-right:auto;color:var(--bad)">삭제</button>
+      <button class="btn btn-quiet btn-sm" data-close type="button">취소</button>
+      <button class="btn btn-primary btn-sm" id="ed-save" type="button">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 다이얼로그 ─────────────────────────────── -->
+<div class="modal" id="m-dlg" hidden>
+  <div class="sheet sm">
+    <div class="sheet-head"><h3 id="dlg-title"></h3></div>
+    <div class="sheet-body">
+      <div class="dlg-msg" id="dlg-msg"></div>
+      <input class="text-input" id="dlg-input" style="margin-top:12px" hidden>
+    </div>
+    <div class="sheet-foot">
+      <button class="btn btn-quiet btn-sm" id="dlg-cancel" type="button">취소</button>
+      <button class="btn btn-primary btn-sm" id="dlg-ok" type="button">확인</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="file-pdf" accept="application/pdf,.pdf" multiple hidden>
+<input type="file" id="file-json" accept="application/json,.json" hidden>
+<div id="toasts"></div>
+
+<script>
+'use strict';
+/* ============================================================
+   1. 기본
+   ============================================================ */
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+function safeParse(raw, fallback) { try { const v = JSON.parse(raw); return v == null ? fallback : v; } catch (e) { return fallback; } }
+function lsGet(k, fb) { try { return safeParse(localStorage.getItem(k), fb); } catch (e) { return fb; } }
+function lsSet(k, v) {
+  try { localStorage.setItem(k, JSON.stringify(v)); return true; }
+  catch (e) { toast('브라우저 저장 공간이 가득 찼습니다 — 백업 후 안 쓰는 단어장을 지워 주세요', 'bad'); return false; }
+}
+function toast(msg, kind) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (kind ? ' ' + kind : '');
+  el.textContent = msg;
+  $('toasts').appendChild(el);
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 260); }, 2600);
+}
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+
+const SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+const MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+function currentTheme() { return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'; }
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  try { localStorage.setItem('vc_theme', t); } catch (e) { /* 저장 불가 */ }
+  $('theme-btn').innerHTML = t === 'dark' ? SUN : MOON;
+}
+$('theme-btn').addEventListener('click', () => applyTheme(currentTheme() === 'dark' ? 'light' : 'dark'));
+$('theme-btn').innerHTML = currentTheme() === 'dark' ? SUN : MOON;
+
+/* ── 모달 ── */
+let openModals = [];
+function openModal(id) {
+  const m = $(id);
+  m.hidden = false;
+  if (!openModals.includes(id)) openModals.push(id);
+}
+function closeModal(id) {
+  $(id).hidden = true;
+  openModals = openModals.filter(x => x !== id);
+  if (!openModals.length) focusQuiz();
+}
+document.querySelectorAll('.modal').forEach(m => {
+  m.addEventListener('mousedown', e => { if (e.target === m && m.id !== 'm-dlg') closeModal(m.id); });
+  m.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => closeModal(m.id)));
+});
+let dlgResolve = null;
+function dialog({ title, message = '', okText = '확인', cancelText = '취소', danger = false, input = null }) {
+  $('dlg-title').textContent = title;
+  $('dlg-msg').textContent = message;
+  $('dlg-ok').textContent = okText;
+  $('dlg-ok').style.background = danger ? 'var(--bad)' : '';
+  $('dlg-cancel').textContent = cancelText;
+  $('dlg-cancel').hidden = cancelText == null;
+  const inp = $('dlg-input');
+  inp.hidden = input == null;
+  if (input != null) inp.value = input;
+  openModal('m-dlg');
+  setTimeout(() => (input != null ? (inp.focus(), inp.select()) : $('dlg-ok').focus()), 30);
+  return new Promise(res => { dlgResolve = res; });
+}
+function endDlg(v) {
+  closeModal('m-dlg');
+  const r = dlgResolve; dlgResolve = null;
+  if (r) r(v);
+}
+$('dlg-ok').addEventListener('click', () => endDlg($('dlg-input').hidden ? true : $('dlg-input').value));
+$('dlg-cancel').addEventListener('click', () => endDlg(null));
+$('dlg-input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); $('dlg-ok').click(); } });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || !openModals.length) return;
+  const top = openModals[openModals.length - 1];
+  if (top === 'm-dlg') endDlg(null); else closeModal(top);
+});
+
+/* ============================================================
+   2. 저장소
+   ------------------------------------------------------------
+   vc_decks            [{id, name, created}]
+   vc_active           현재 단어장 id
+   vc_words_<id>       [{id, term, pos, ko, def, ex, blanks:[[s,e]], core, fav}]
+   vc_stats_<id>       {wordId: {n: 출제 수, w: 틀린 수}}
+   vc_prog_<id>        진행 상황 (라운드 · 남은 단어)
+   vc_opts             출제 옵션
+   ============================================================ */
+const K = {
+  decks: 'vc_decks', active: 'vc_active', opts: 'vc_opts',
+  words: id => 'vc_words_' + id, stats: id => 'vc_stats_' + id, prog: id => 'vc_prog_' + id,
+};
+let decks = lsGet(K.decks, []);
+let activeId = lsGet(K.active, null);
+let words = [];
+let wordMap = new Map();
+let stats = {};
+const opts = Object.assign({ scope: 'all', chunk: 0, shuffle: true, first: false, ko: false, speak: false }, lsGet(K.opts, {}));
+
+function saveDecks() { lsSet(K.decks, decks); lsSet(K.active, activeId); }
+function saveWords() { lsSet(K.words(activeId), words); wordMap = new Map(words.map(w => [w.id, w])); }
+function saveStats() { lsSet(K.stats(activeId), stats); }
+function saveOpts() { lsSet(K.opts, opts); }
+function activeDeck() { return decks.find(d => d.id === activeId) || null; }
+function loadDeck(id) {
+  activeId = id;
+  words = id ? lsGet(K.words(id), []) : [];
+  wordMap = new Map(words.map(w => [w.id, w]));
+  stats = id ? lsGet(K.stats(id), {}) : {};
+  saveDecks();
+}
+function createDeck(name) {
+  const d = { id: uid(), name: name || '새 단어장', created: Date.now() };
+  decks.push(d);
+  saveDecks();
+  return d;
+}
+
+/* ── 정답 비교 ── */
+function norm(s) {
+  return String(s || '').toLowerCase()
+    .replace(/[’‘`´]/g, "'").replace(/[‐‑‒–—]/g, '-')
+    .replace(/\s+/g, ' ').trim()
+    .replace(/^[\s"“”'(.,;:!?]+|[\s"“”'),.;:!?]+$/g, '');
+}
+function answersOf(w) { return (w.blanks || []).map(([a, b]) => w.ex.slice(a, b)); }
+function mainAnswer(w) { const a = answersOf(w); return a.length ? a[0] : w.term; }
+function isCorrect(w, typed) {
+  const t = norm(typed);
+  if (!t) return false;
+  const answers = answersOf(w);
+  if (!answers.length) return VocabPDF.baseForms(w.term).some(f => norm(f) === t);
+  return answers.some(a => norm(a) === t);
+}
+/** 기본형(표제어)은 맞혔지만 문장 속 형태가 다른 경우 */
+function isLemmaOnly(w, typed) {
+  const t = norm(typed);
+  return !!t && VocabPDF.baseForms(w.term).some(f => norm(f) === t);
+}
+
+/* ============================================================
+   3. 출제 순서 — 세트 · 라운드
+   ------------------------------------------------------------
+   범위(전체/핵심/★/오답)의 단어를 '세트'로 나눠 차례로 푼다.
+   한 세트 안에서는 틀린 단어만 모아 다음 라운드에 다시 내고, 전부 맞히면 다음 세트로.
+   ============================================================ */
+let prog = null;        // {key, set, pool, round, queue, next, setNo, setTotal, roundTotal, done}
+let cur = null;         // 지금 문제의 상태
+
+function scopeIds(scope) {
+  let list = words;
+  if (scope === 'core') list = words.filter(w => w.core);
+  else if (scope === 'fav') list = words.filter(w => w.fav);
+  else if (scope === 'weak') {
+    list = words.filter(w => stats[w.id] && stats[w.id].w > 0)
+      .sort((a, b) => rate(b) - rate(a));
+  }
+  return list.map(w => w.id);
+}
+function rate(w) { const s = stats[w.id]; return s && s.n ? s.w / s.n : 0; }
+function progKey() { return [opts.scope, opts.chunk, opts.shuffle ? 1 : 0].join('|'); }
+function saveProg() { if (activeId) lsSet(K.prog(activeId), prog); }
+
+function startSession() {
+  let ids = scopeIds(opts.scope);
+  if (opts.shuffle && opts.scope !== 'weak') shuffle(ids);
+  const n = opts.chunk > 0 ? opts.chunk : ids.length;
+  const set = ids.slice(0, n);
+  prog = {
+    key: progKey(), pool: ids.slice(n), round: 1, queue: set.slice(), next: [],
+    setNo: 1, setTotal: Math.max(1, Math.ceil(ids.length / Math.max(1, n))), roundTotal: set.length, done: false,
+  };
+  saveProg();
+}
+function restoreSession() {
+  const p = activeId ? lsGet(K.prog(activeId), null) : null;
+  if (!p || p.key !== progKey() || !Array.isArray(p.queue)) return false;
+  // 지워진 단어는 빼고 이어서
+  const keep = id => wordMap.has(id);
+  p.queue = p.queue.filter(keep); p.next = (p.next || []).filter(keep); p.pool = (p.pool || []).filter(keep);
+  prog = p;
+  return true;
+}
+/** 지금 문제를 마치고 다음 문제로 — 라운드·세트 경계를 넘긴다 */
+function advanceQueue() {
+  if (!prog) return;
+  if (prog.queue.length) return;
+  if (prog.next.length) {
+    prog.round++;
+    prog.queue = opts.shuffle ? shuffle(prog.next.slice()) : prog.next.slice();
+    prog.next = [];
+    prog.roundTotal = prog.queue.length;
+    toast(`${prog.round - 1}라운드 끝 — 틀린 ${prog.queue.length}개를 다시 냅니다`);
+  } else if (prog.pool.length) {
+    const n = opts.chunk > 0 ? opts.chunk : prog.pool.length;
+    prog.queue = prog.pool.splice(0, n);
+    prog.setNo++;
+    prog.round = 1;
+    prog.roundTotal = prog.queue.length;
+    toast(`세트 ${prog.setNo - 1} 완료! 다음 세트를 시작합니다`, 'good');
+  } else prog.done = true;
+}
+
+/* ============================================================
+   4. 학습 화면
+   ============================================================ */
+function render() {
+  updateBrand();
+  updateScopeUI();
+  const hasWords = words.length > 0;
+  $('empty').hidden = hasWords;
+  $('done').hidden = true;
+  $('quiz').hidden = true;
+  $('badges').hidden = true;
+  $('actions').hidden = true;
+  if (!hasWords) { cur = null; updateMeter(); return; }
+  if (!prog) startSession();
+  while (prog.queue.length && !wordMap.has(prog.queue[0])) prog.queue.shift();
+  if (!prog.queue.length) advanceQueue();
+  if (prog.done || !prog.queue.length) { showDone(); return; }
+  showWord(prog.queue[0]);
+}
+
+function showDone() {
+  cur = null;
+  const total = scopeIds(opts.scope).length;
+  $('done').hidden = false;
+  if (!total) {
+    $('done-title').textContent = { fav: '즐겨찾기한 단어가 없습니다', weak: '틀린 단어가 없습니다', core: '핵심 단어가 없습니다' }[opts.scope] || '단어가 없습니다';
+    $('done-desc').textContent = opts.scope === 'fav' ? '문제 화면이나 단어 목록에서 ☆를 눌러 단어를 모아 두세요.' : '출제 범위를 전체로 바꿔 보세요.';
+    $('btn-again').hidden = true;
+  } else {
+    $('done-title').textContent = '모두 외웠습니다';
+    $('done-desc').textContent = `${total}개 단어를 전부 맞혔습니다. 오답 범위로 약한 단어만 다시 볼 수도 있어요.`;
+    $('btn-again').hidden = false;
+  }
+  updateMeter();
+}
+
+function showWord(id) {
+  const w = wordMap.get(id);
+  cur = { id, w, wrong: false, lastWrong: null, lemmaHint: null, tries: 0, done: false, result: null, typed: '', accepted: false };
+  $('quiz').hidden = false;
+  $('badges').hidden = false;
+  $('actions').hidden = false;
+  $('feedback').hidden = true;
+  $('btn-check').hidden = false;
+  $('btn-giveup').hidden = false;
+  $('btn-next').hidden = true;
+  $('b-retry').hidden = prog.round === 1;
+  $('b-pos').textContent = w.pos || '—';
+  $('b-pos').hidden = !w.pos;
+  $('b-core').hidden = !w.core;
+  updateStar();
+  hint('', '');
+
+  const answers = answersOf(w);
+  $('q-def').textContent = VocabPDF.maskInText(w.def || '(영어 뜻 없음)', w.term, answers);
+  $('q-ko').textContent = w.ko || '';
+  $('q-ko').hidden = !(opts.ko && w.ko);
+
+  const box = $('q-sentence');
+  box.innerHTML = '';
+  box.classList.remove('done');
+  const note = $('q-note');
+  note.hidden = true;
+  let input;
+  if (w.ex && answers.length) {
+    $('q-sent-label').textContent = 'Fill in the blank';
+    const ranges = (w.blanks || []).slice().sort((a, b) => a[0] - b[0]);
+    let pos = 0;
+    ranges.forEach(([a, b], i) => {
+      box.appendChild(document.createTextNode(w.ex.slice(pos, a)));
+      if (i === 0) {
+        input = makeInput(w);
+        box.appendChild(input);
+      } else {
+        const m = document.createElement('span');
+        m.className = 'blank-mask';
+        m.textContent = '\u2002';                 // 정답 글자는 맞힌 뒤에 넣는다 (전체 선택으로 보이지 않게)
+        m.dataset.i = i;
+        box.appendChild(m);
+      }
+      pos = b;
+    });
+    box.appendChild(document.createTextNode(w.ex.slice(pos)));
+  } else {
+    // 예문이 없거나 빈칸을 못 찾았다 — 뜻만 보고 단어를 쓴다 (예문은 정답을 드러내므로 숨긴다)
+    $('q-sent-label').textContent = 'Type the word';
+    const row = document.createElement('div');
+    row.className = 'solo';
+    input = makeInput(w);
+    row.append(input);
+    box.appendChild(row);
+    if (w.ex) { note.hidden = false; note.textContent = '예문에서 빈칸 위치를 찾지 못해 예문을 숨겼습니다 — ✎ 편집에서 빈칸을 고를 수 있어요.'; }
+  }
+  cur.input = input;
+  updateMeter();
+  focusQuiz();
+}
+
+function makeInput(w) {
+  const inp = document.createElement('input');
+  inp.className = 'blank-input';
+  inp.type = 'text';
+  inp.autocomplete = 'off';
+  inp.spellcheck = false;
+  inp.setAttribute('autocapitalize', 'off');
+  inp.setAttribute('autocorrect', 'off');
+  inp.setAttribute('aria-label', '빈칸 답');
+  if (opts.first) {
+    const a = mainAnswer(w);
+    inp.placeholder = a.charAt(0) + '…';
+  }
+  inp.addEventListener('keydown', onInputKey);
+  inp.addEventListener('input', () => { growInput(inp); if (inp.classList.contains('ng')) inp.classList.remove('ng'); });
+  return inp;
+}
+const measureCtx = document.createElement('canvas').getContext('2d');
+function growInput(inp) {
+  const cs = getComputedStyle(inp);
+  measureCtx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  const w = measureCtx.measureText(inp.value || inp.placeholder || '').width + 24;
+  const base = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--blank-w')) || 128;
+  inp.style.width = Math.max(base, Math.ceil(w)) + 'px';
+}
+function focusQuiz() {
+  if (openModals.length) return;
+  if (cur && !cur.done && cur.input) {
+    const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    cur.input.focus({ preventScroll: true });
+    const r = cur.input.getBoundingClientRect();
+    if (r.top < 60 || r.bottom > innerHeight - 40) cur.input.scrollIntoView({ block: 'center', behavior: smooth ? 'smooth' : 'auto' });
+  } else if (cur && cur.done) $('btn-next').focus({ preventScroll: true });
+}
+
+/* ── Enter 처리 ──
+   코드 플래시카드와 같은 규칙: 같은 Enter 한 번이 채점과 '다음 문제'를 동시에 하지 않게 막는다 */
+let enterLatch = 0, nextShownAt = 0;
+const NEXT_GUARD_MS = 450;
+function takeEnter(e) {
+  const now = performance.now();
+  if (e.repeat || now - enterLatch < 250) { e.preventDefault(); return false; }
+  enterLatch = now;
+  return true;
+}
+function onInputKey(e) {
+  if (e.key !== 'Enter') return;
+  e.stopPropagation();
+  e.preventDefault();
+  if (e.isComposing || e.keyCode === 229) {
+    const inp = e.target, shift = e.shiftKey;
+    inp.addEventListener('compositionend', () => setTimeout(() => submit(shift), 0), { once: true });
+    return;
+  }
+  if (!takeEnter(e)) return;
+  submit(e.shiftKey);
+}
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' || openModals.length || !cur || !cur.done) return;
+  const t = e.target;
+  if (t && (t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && t !== cur.input) || t.tagName === 'SELECT')) return;
+  if (t && t.tagName === 'BUTTON' && t.id !== 'btn-next') return;   // 다른 버튼의 Enter 는 그 버튼이 처리
+  e.preventDefault();
+  if (!takeEnter(e)) return;
+  if (performance.now() - nextShownAt < NEXT_GUARD_MS) return;
+  if (e.shiftKey && canAccept()) { acceptCard(); return; }
+  goNext();
+});
+$('btn-check').addEventListener('click', () => submit(false));
+$('btn-giveup').addEventListener('click', () => { if (cur && !cur.done) reveal(cur.input.value); });
+$('btn-next').addEventListener('click', () => {
+  // 키보드 Enter 는 위의 keydown 이 preventDefault 로 처리해서 여기까지 오지 않는다
+  if (performance.now() - nextShownAt < NEXT_GUARD_MS) return;
+  goNext();
+});
+$('btn-again').addEventListener('click', () => { startSession(); render(); });
+
+function submit(shift) {
+  if (!cur || cur.done) return;
+  const inp = cur.input, w = cur.w;
+  if (shift && cur.lastWrong != null && inp.classList.contains('ng')) { finish('ok-accepted'); return; }
+  const v = inp.value;
+  const n = norm(v);
+  if (!n) { reveal(''); return; }
+  if (cur.lastWrong === n) { reveal(v); return; }          // 고치지 않고 다시 Enter → 정답 보기
+  if (isCorrect(w, v)) { finish(cur.wrong ? 'fixed' : 'ok'); return; }
+  if (isLemmaOnly(w, v) && cur.lemmaHint !== n) {
+    // 기본형은 맞혔다 — 감점 없이 형태만 고치게 한다
+    cur.lemmaHint = n;
+    hint('warn', '기본형은 맞아요! 문장에 맞는 형태로 바꿔 보세요 (-s, -ed, -ing …)');
+    inp.select();
+    return;
+  }
+  cur.wrong = true;
+  cur.lastWrong = n;
+  cur.tries++;
+  inp.classList.add('ng');
+  inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake');
+  if (!prog.next.includes(cur.id)) prog.next.push(cur.id);
+  saveProg();
+  hintWrong(v);
+  updateMeter();
+  inp.select();
+}
+function hintWrong(typed) {
+  const el = $('inline-hint');
+  el.className = 'ng';
+  el.innerHTML = '';
+  el.append(document.createTextNode('틀렸습니다 · 고쳐서 다시 Enter · 그대로 Enter → 정답 보기 · '));
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'link-btn';
+  b.textContent = `"${typed.length > 24 ? typed.slice(0, 24) + '…' : typed}" 정답으로 인정 (⇧Enter)`;
+  b.addEventListener('mousedown', e => e.preventDefault());
+  b.addEventListener('click', () => { if (cur && !cur.done) finish('ok-accepted'); });
+  el.append(b);
+}
+function hint(kind, msg) {
+  const el = $('inline-hint');
+  el.className = kind;
+  el.textContent = msg;
+}
+function reveal(typed) {
+  if (!cur || cur.done) return;
+  cur.typed = typed && norm(typed) ? typed : '';
+  finish('revealed');
+}
+
+/**
+ * 문제 마무리 — ok: 처음에 맞힘 / fixed: 틀렸다가 고쳐서 맞힘 / revealed: 정답을 봄 / ok-accepted: 오답을 정답으로 인정
+ * 통계는 문제당 한 번: 처음 입력에 맞혔으면 정답, 아니면 오답. 틀린 단어는 다음 라운드에 다시 나온다.
+ */
+function finish(kind) {
+  const w = cur.w, inp = cur.input;
+  cur.done = true;
+  cur.result = kind;
+  const wrong = kind === 'fixed' || kind === 'revealed';
+  const s = stats[w.id] || (stats[w.id] = { n: 0, w: 0 });
+  s.n++;
+  if (wrong) s.w++;
+  s.t = Date.now();
+  saveStats();
+  if (wrong) { if (!prog.next.includes(cur.id)) prog.next.push(cur.id); }
+  else prog.next = prog.next.filter(x => x !== cur.id);
+  prog.queue = prog.queue.filter(x => x !== cur.id);
+  saveProg();
+
+  const answer = mainAnswer(w);
+  inp.disabled = true;
+  inp.classList.remove('ng', 'shake');
+  if (kind === 'revealed') { inp.value = answer; inp.classList.add('revealed'); }
+  else { inp.classList.add('ok'); if (kind === 'ok' || kind === 'fixed') inp.value = inp.value.trim(); }
+  growInput(inp);
+  $('q-sentence').classList.add('done');
+  const ranges = (w.blanks || []).slice().sort((a, b) => a[0] - b[0]);
+  $('q-sentence').querySelectorAll('.blank-mask').forEach(m => {
+    const r = ranges[Number(m.dataset.i)];
+    if (r) m.textContent = w.ex.slice(r[0], r[1]);
+    m.classList.add('shown');
+    if (kind === 'revealed') m.classList.add('rv');
+  });
+  $('q-ko').hidden = !w.ko;
+
+  hint('', '');
+  const fb = $('feedback');
+  fb.hidden = false;
+  fb.className = 'feedback ' + (kind === 'revealed' ? 'bad' : kind === 'fixed' ? 'warn' : 'good');
+  $('fb-title').textContent = { ok: '정답!', 'ok-accepted': '정답으로 인정했습니다', fixed: '정답 — 하지만 앞에서 틀렸어요', revealed: '정답을 확인하세요' }[kind];
+  $('fb-term').textContent = w.term;
+  $('fb-pos').textContent = w.pos || '';
+  $('fb-ko').textContent = w.ko || '';
+  $('fb-def').textContent = w.def || '';
+  const desc = $('fb-desc');
+  desc.innerHTML = '';
+  if (kind === 'fixed') desc.textContent = '틀린 적이 있어서 다음 라운드에 한 번 더 나옵니다.';
+  else if (kind === 'revealed') {
+    if (cur.typed) desc.appendChild(diffRows(cur.typed, answer));
+    desc.appendChild(document.createTextNode('다음 라운드에 다시 나옵니다.'));
+  } else if (kind === 'ok' && norm(answer) !== norm(w.term) && !VocabPDF.baseForms(w.term).some(f => norm(f) === norm(answer))) {
+    desc.textContent = `문장 속 형태: ${answer}`;
+  }
+  $('fb-accept').hidden = !canAccept();
+  $('fb-speak').hidden = $('fb-speak-sent').hidden = !('speechSynthesis' in window);
+  $('fb-speak-sent').hidden = $('fb-speak-sent').hidden || !w.ex;
+  if (kind === 'ok-accepted') toast('정답으로 처리했습니다', 'good');
+
+  $('btn-check').hidden = true;
+  $('btn-giveup').hidden = true;
+  $('btn-next').hidden = false;
+  nextShownAt = performance.now();
+  $('btn-next').focus({ preventScroll: true });
+  updateMeter();
+  if (opts.speak) speak(w.term);
+  if (kind === 'ok-accepted') goNext();           // 인정은 바로 다음 문제로 (코드 플래시카드와 같게)
+}
+function canAccept() { return !!(cur && cur.done && !cur.accepted && (cur.result === 'fixed' || (cur.result === 'revealed' && cur.typed))); }
+/** 채점기가 틀렸다고 했지만 맞는 답이었을 때 — 통계와 오답 목록에서 뺀다 */
+function acceptCard() {
+  if (!canAccept()) return;
+  cur.accepted = true;
+  const s = stats[cur.id];
+  if (s && s.w > 0) s.w--;
+  saveStats();
+  prog.next = prog.next.filter(x => x !== cur.id);
+  saveProg();
+  toast('정답으로 처리했습니다', 'good');
+  goNext();
+}
+$('fb-accept').addEventListener('click', acceptCard);
+function goNext() {
+  if (!prog) return;
+  if (!prog.queue.length) advanceQueue();
+  saveProg();
+  render();
+}
+function diffRows(typed, answer) {
+  const mine = document.createElement('span'), right = document.createElement('span');
+  mine.className = right.className = 'hint-diff';
+  const put = (box, cls, txt) => {
+    if (!cls) { box.appendChild(document.createTextNode(txt)); return; }
+    const sp = document.createElement('span'); sp.className = cls; sp.textContent = txt; box.appendChild(sp);
+  };
+  if (window.Diff) {
+    Diff.diffChars(typed.trim().toLowerCase(), answer.toLowerCase()).forEach(p => {
+      if (p.added) put(right, 'hd-add', p.value);
+      else if (p.removed) put(mine, 'hd-del', p.value);
+      else { put(mine, '', p.value); put(right, '', p.value); }
+    });
+  } else { mine.textContent = typed; right.textContent = answer; }
+  const wrap = document.createElement('div');
+  wrap.className = 'hint-diff-grid';
+  const lab = t => { const l = document.createElement('span'); l.className = 'hint-diff-label'; l.textContent = t; return l; };
+  wrap.append(lab('내 답'), mine, lab('정답'), right);
+  return wrap;
+}
+
+/* ── 발음 ── */
+function speak(text) {
+  if (!('speechSynthesis' in window) || !text) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'en-US';
+    const v = speechSynthesis.getVoices().find(x => /^en(-|_)US/i.test(x.lang)) || speechSynthesis.getVoices().find(x => /^en/i.test(x.lang));
+    if (v) u.voice = v;
+    u.rate = 0.95;
+    speechSynthesis.speak(u);
+  } catch (e) { /* 지원 안 함 */ }
+}
+$('fb-speak').addEventListener('click', () => cur && speak(cur.w.term));
+$('fb-speak-sent').addEventListener('click', () => cur && speak(cur.w.ex));
+
+/* ── 즐겨찾기 · 편집 ── */
+function updateStar() {
+  const on = !!(cur && cur.w.fav);
+  $('b-star').classList.toggle('on', on);
+  $('b-star').title = on ? '즐겨찾기 해제' : '즐겨찾기';
+}
+function toggleFav(id) {
+  const w = wordMap.get(id);
+  if (!w) return;
+  w.fav = !w.fav;
+  saveWords();
+  updateScopeUI();
+}
+$('b-star').addEventListener('click', () => { if (!cur) return; toggleFav(cur.id); cur.w = wordMap.get(cur.id); updateStar(); focusQuiz(); });
+$('b-edit').addEventListener('click', () => { if (cur) openEditor(cur.id); });
+
+/* ── 계기판 ── */
+function updateMeter() {
+  const has = prog && words.length;
+  if (!has) {
+    $('round-label').innerHTML = '—';
+    $('meter-pct').textContent = '';
+    $('meter-bar').style.width = '0%';
+    $('st-left').textContent = '0';
+    $('st-wrong').textContent = '0';
+  } else {
+    const total = prog.roundTotal || 0;
+    const left = prog.queue.length;
+    const doneN = Math.max(0, total - left);
+    const pct = prog.done ? 100 : total ? Math.round(doneN / total * 100) : 0;
+    const setTxt = prog.setTotal > 1 ? `<small>세트 ${prog.setNo}/${prog.setTotal}</small>` : '';
+    $('round-label').innerHTML = prog.done ? 'Clear' : `${prog.round}라운드${setTxt}`;
+    $('meter-pct').textContent = pct + '%';
+    $('meter-bar').style.width = pct + '%';
+    $('st-left').textContent = left + prog.pool.length;
+    $('st-wrong').textContent = prog.next.length;
+    if (cur && !prog.done) $('b-progress').textContent = `${Math.min(total, doneN + (cur.done ? 0 : 1))} / ${total}`;
+  }
+  let n = 0, wr = 0;
+  for (const w of words) { const s = stats[w.id]; if (s) { n += s.n; wr += s.w; } }
+  $('st-acc').textContent = n ? Math.round((n - wr) / n * 100) + '%' : '—';
+}
+function updateBrand() {
+  const d = activeDeck();
+  $('brand-deck').textContent = d ? d.name : '';
+  $('brand-sub').textContent = d ? `${words.length}개 단어` : '';
+  const sel = $('deck-select');
+  sel.innerHTML = decks.length ? decks.map(x => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('') : '<option value="">단어장 없음</option>';
+  sel.value = activeId || '';
+  $('deck-rename').disabled = $('deck-delete').disabled = !d;
+}
+function updateScopeUI() {
+  const counts = {
+    all: words.length,
+    core: words.filter(w => w.core).length,
+    fav: words.filter(w => w.fav).length,
+    weak: words.filter(w => stats[w.id] && stats[w.id].w > 0).length,
+  };
+  document.querySelectorAll('#scope-seg button').forEach(b => {
+    b.setAttribute('aria-pressed', String(b.dataset.v === opts.scope));
+    b.textContent = { all: '전체', core: '핵심', fav: '★', weak: '오답' }[b.dataset.v] + (words.length ? ' ' + counts[b.dataset.v] : '');
+  });
+  $('scope-note').textContent = {
+    all: '', core: 'PDF에서 파란색으로 표시된 핵심 단어만', fav: '☆를 누른 단어만', weak: '한 번이라도 틀린 단어 · 오답률 높은 순',
+  }[opts.scope];
+}
+
+/* ── 옵션 ── */
+function syncSwitch(el, on) { el.setAttribute('aria-checked', on ? 'true' : 'false'); }
+function bindSwitch(id, key, after) {
+  const el = $(id);
+  syncSwitch(el, opts[key]);
+  el.addEventListener('click', () => { opts[key] = !opts[key]; syncSwitch(el, opts[key]); saveOpts(); if (after) after(); });
+}
+bindSwitch('opt-shuffle', 'shuffle', () => { startSession(); render(); toast(opts.shuffle ? '순서를 섞어 다시 시작합니다' : '원래 순서로 다시 시작합니다'); });
+bindSwitch('opt-first', 'first', () => {
+  if (cur && !cur.done && cur.input) { cur.input.placeholder = opts.first ? mainAnswer(cur.w).charAt(0) + '…' : ''; growInput(cur.input); }
+});
+bindSwitch('opt-ko', 'ko', () => { if (cur) $('q-ko').hidden = !(cur.w.ko && (opts.ko || cur.done)); });
+bindSwitch('opt-speak', 'speak');
+$('chunk-select').value = String(opts.chunk);
+$('chunk-select').addEventListener('change', e => { opts.chunk = Number(e.target.value) || 0; saveOpts(); startSession(); render(); });
+$('scope-seg').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b || b.dataset.v === opts.scope) return;
+  opts.scope = b.dataset.v;
+  saveOpts();
+  if (!restoreSession()) startSession();
+  render();
+});
+$('btn-reset').addEventListener('click', async () => {
+  if (!words.length) return;
+  const ok = await dialog({ title: '처음부터 다시', message: '지금 범위의 진행 상황을 지우고 1라운드부터 다시 시작합니다.\n오답률 통계는 그대로 둡니다.', okText: '다시 시작' });
+  if (!ok) return;
+  startSession();
+  render();
+});
+
+/* ── 단어장 ── */
+$('deck-select').addEventListener('change', e => { switchDeck(e.target.value); });
+function switchDeck(id) {
+  loadDeck(id);
+  prog = null;
+  if (!restoreSession()) startSession();
+  render();
+}
+$('deck-rename').addEventListener('click', async () => {
+  const d = activeDeck();
+  if (!d) return;
+  const name = await dialog({ title: '단어장 이름 바꾸기', input: d.name, okText: '저장' });
+  if (name == null || !name.trim()) return;
+  d.name = name.trim();
+  saveDecks();
+  updateBrand();
+});
+$('deck-delete').addEventListener('click', async () => {
+  const d = activeDeck();
+  if (!d) return;
+  const ok = await dialog({ title: '단어장 삭제', message: `"${d.name}" 단어장과 진행 상황·통계를 모두 지웁니다.\n되돌릴 수 없습니다.`, okText: '삭제', danger: true });
+  if (!ok) return;
+  [K.words(d.id), K.stats(d.id), K.prog(d.id)].forEach(k => { try { localStorage.removeItem(k); } catch (e) { /* 무시 */ } });
+  decks = decks.filter(x => x.id !== d.id);
+  switchDeck(decks.length ? decks[decks.length - 1].id : null);
+  toast('삭제했습니다');
+});
+
+/* ============================================================
+   5. PDF 가져오기
+   ============================================================ */
+let pdfLib = null;
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = res; s.onerror = () => rej(new Error(src + ' 를 불러오지 못했습니다'));
+    document.head.appendChild(s);
+  });
+}
+async function getPdfLib() {
+  if (pdfLib) return pdfLib;
+  // file:// 에서는 Worker 를 만들 수 없어 pdf.js 가 메인 스레드에서 돌도록 워커 코드를 먼저 올린다
+  if (location.protocol === 'file:') await loadScript('../vendor/pdf.worker.min.js');
+  await loadScript('../vendor/pdf.min.js');
+  pdfLib = window.pdfjsLib;
+  pdfLib.GlobalWorkerOptions.workerSrc = new URL('../vendor/pdf.worker.min.js', location.href).href;
+  return pdfLib;
+}
+
+let imp = null;    // {entries: [...], on: Set, name}
+function resetImport() {
+  imp = null;
+  $('imp-pick').hidden = false;
+  $('imp-loading').hidden = true;
+  $('imp-preview').hidden = true;
+  $('imp-go').disabled = true;
+  $('imp-status').textContent = '';
+}
+function openImport() {
+  resetImport();
+  openModal('m-import');
+}
+$('btn-import').addEventListener('click', openImport);
+['imp-drop', 'empty-drop'].forEach(id => {
+  const z = $(id);
+  z.addEventListener('click', () => $('file-pdf').click());
+  z.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file-pdf').click(); } });
+});
+$('file-pdf').addEventListener('change', e => {
+  const files = [...e.target.files];
+  e.target.value = '';
+  if (files.length) handlePdfFiles(files);
+});
+/* 페이지 어디에나 끌어다 놓기 */
+let dragDepth = 0;
+document.addEventListener('dragenter', e => { if ([...(e.dataTransfer.types || [])].includes('Files')) { dragDepth++; document.body.classList.add('dragging'); } });
+document.addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) document.body.classList.remove('dragging'); });
+document.addEventListener('dragover', e => { if ([...(e.dataTransfer.types || [])].includes('Files')) e.preventDefault(); });
+document.addEventListener('drop', e => {
+  dragDepth = 0;
+  document.body.classList.remove('dragging');
+  const files = [...(e.dataTransfer.files || [])];
+  if (!files.length) return;
+  e.preventDefault();
+  const pdfs = files.filter(f => /\.pdf$/i.test(f.name) || f.type === 'application/pdf');
+  const json = files.find(f => /\.json$/i.test(f.name));
+  if (pdfs.length) handlePdfFiles(pdfs);
+  else if (json) restoreFromFile(json);
+  else toast('PDF 파일만 올릴 수 있습니다', 'bad');
+});
+
+async function handlePdfFiles(files) {
+  if ($('m-import').hidden) openImport();
+  $('imp-pick').hidden = true;
+  $('imp-preview').hidden = true;
+  $('imp-loading').hidden = false;
+  $('imp-loading').textContent = 'PDF 읽는 중…';
+  const all = [];
+  let title = '';
+  try {
+    const lib = await getPdfLib();
+    for (const [fi, f] of files.entries()) {
+      const data = new Uint8Array(await f.arrayBuffer());
+      const doc = await VocabPDF.extractPdf(data, lib, (p, n) => {
+        $('imp-loading').textContent = `${files.length > 1 ? `(${fi + 1}/${files.length}) ` : ''}${f.name} — ${p} / ${n}쪽 읽는 중…`;
+      });
+      const r = VocabPDF.parseVocab(doc);
+      if (!title) title = prettyTitle(r.title, f.name);
+      r.entries.forEach(e => all.push(e));
+    }
+  } catch (err) {
+    console.error(err);
+    resetImport();
+    const msg = /password/i.test(err && err.name + err.message) ? '암호가 걸린 PDF는 읽을 수 없습니다.' : 'PDF를 읽지 못했습니다: ' + (err && err.message || err);
+    $('imp-status').textContent = msg;
+    toast(msg, 'bad');
+    return;
+  }
+  if (!all.length) {
+    resetImport();
+    $('imp-status').textContent = '단어를 찾지 못했습니다 — 글자를 선택할 수 없는 스캔 PDF이거나 형식이 다릅니다.';
+    toast('단어를 찾지 못했습니다', 'bad');
+    return;
+  }
+  // 같은 단어가 여러 번 나오면 하나만
+  const seen = new Set();
+  const entries = all.filter(e => { const k = e.term.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
+  imp = { entries, on: new Set(entries.map((_, i) => i)), target: 'new' };
+  $('imp-name').value = title;
+  $('imp-name').disabled = false;
+  $('imp-loading').hidden = true;
+  $('imp-preview').hidden = false;
+  setSeg('imp-target', imp.target);
+  renderImport();
+}
+function prettyTitle(meta, file) {
+  let t = (meta || '').trim();
+  if (!t) t = file.replace(/\.pdf$/i, '').replace(/^[0-9a-f]{6,}[-_]/i, '').replace(/[_]+/g, ' ');
+  return t.slice(0, 80);
+}
+function setSeg(id, v) { document.querySelectorAll(`#${id} button`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === v))); }
+$('imp-target').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b || !imp) return;
+  if (b.dataset.v === 'cur' && !activeDeck()) { toast('현재 단어장이 없어 새 단어장으로 만듭니다'); return; }
+  imp.target = b.dataset.v;
+  setSeg('imp-target', imp.target);
+  $('imp-name').disabled = imp.target === 'cur';
+  updateImportStatus();
+});
+function sentenceHtml(text, blanks) {
+  let out = '', pos = 0;
+  (blanks || []).slice().sort((a, b) => a[0] - b[0]).forEach(([a, b]) => {
+    out += esc(text.slice(pos, a)) + '<mark class="ans">' + esc(text.slice(a, b)) + '</mark>';
+    pos = b;
+  });
+  return out + esc(text.slice(pos));
+}
+function renderImport() {
+  const es = imp.entries;
+  const core = es.filter(e => e.core).length;
+  const noEx = es.filter(e => !e.examples.length).length;
+  const noBlank = es.filter(e => e.examples.length && !e.examples.some(x => x.blanks.length)).length;
+  $('imp-summary').innerHTML =
+    `<span class="badge accent">${es.length}개 단어</span>` +
+    (core ? `<span class="badge core">핵심 ${core}개</span>` : '') +
+    (noEx ? `<span class="badge">예문 없음 ${noEx}개</span>` : '') +
+    (noBlank ? `<span class="badge bad">빈칸 못 찾음 ${noBlank}개</span>` : '');
+  $('imp-hint').textContent = noBlank ? '빈칸을 못 찾은 단어는 가져온 뒤 ✎ 편집에서 고를 수 있어요' : '';
+  $('imp-list').innerHTML = es.map((e, i) => {
+    const ex = e.examples.find(x => x.blanks.length) || e.examples[0];
+    const tags = (e.core ? '<span class="tag core">핵심</span>' : '') +
+      (!ex ? '<span class="tag">예문 없음</span>' : !ex.blanks.length ? '<span class="tag warn">빈칸 못 찾음</span>' : '');
+    return `<label class="imp-item${imp.on.has(i) ? '' : ' off'}" data-i="${i}">
+      <input type="checkbox" class="cb" ${imp.on.has(i) ? 'checked' : ''}>
+      <div class="body">
+        <div class="t"><b>${esc(e.term)}</b><i>${esc(e.pos)}</i><span>${esc(e.ko)}</span>${tags}</div>
+        <div class="d">${esc(e.def)}</div>
+        ${ex ? `<div class="s">${sentenceHtml(ex.text, ex.blanks)}</div>` : ''}
+      </div></label>`;
+  }).join('');
+  updateImportStatus();
+}
+$('imp-list').addEventListener('change', e => {
+  const item = e.target.closest('.imp-item');
+  if (!item || !imp) return;
+  const i = Number(item.dataset.i);
+  if (e.target.checked) imp.on.add(i); else imp.on.delete(i);
+  item.classList.toggle('off', !e.target.checked);
+  updateImportStatus();
+});
+$('imp-all').addEventListener('click', () => { if (!imp) return; imp.entries.forEach((_, i) => imp.on.add(i)); renderImport(); });
+$('imp-none').addEventListener('click', () => { if (!imp) return; imp.on.clear(); renderImport(); });
+function updateImportStatus() {
+  const n = imp ? imp.on.size : 0;
+  $('imp-go').disabled = !n;
+  $('imp-go').textContent = n ? `${n}개 가져오기` : '가져오기';
+  $('imp-status').textContent = imp && imp.target === 'cur' && activeDeck() ? `"${activeDeck().name}"에 추가 · 이미 있는 단어는 건너뜁니다` : '';
+}
+function entryToWord(e) {
+  const ex = e.examples.find(x => x.blanks.length) || e.examples[0] || { text: '', blanks: [] };
+  return { id: uid(), term: e.term, pos: e.pos || '', ko: e.ko || '', def: e.def || '', ex: ex.text, blanks: ex.blanks, core: !!e.core, fav: false };
+}
+$('imp-go').addEventListener('click', () => {
+  if (!imp || !imp.on.size) return;
+  const picked = imp.entries.filter((_, i) => imp.on.has(i)).map(entryToWord);
+  let added = picked.length, skipped = 0;
+  if (imp.target === 'cur' && activeDeck()) {
+    const have = new Set(words.map(w => w.term.toLowerCase()));
+    const fresh = picked.filter(w => !have.has(w.term.toLowerCase()));
+    skipped = picked.length - fresh.length;
+    added = fresh.length;
+    words = words.concat(fresh);
+    saveWords();
+    // 진행 중인 세션에 새 단어를 끼워 넣지 않고 새로 시작한다
+    startSession();
+  } else {
+    const d = createDeck(($('imp-name').value || '').trim() || '새 단어장');
+    loadDeck(d.id);
+    words = picked;
+    saveWords();
+    prog = null;
+    startSession();
+  }
+  closeModal('m-import');
+  render();
+  toast(`${added}개 단어를 가져왔습니다${skipped ? ` · 중복 ${skipped}개 건너뜀` : ''}`, 'good');
+});
+
+/* ============================================================
+   6. 단어 목록 · 편집
+   ============================================================ */
+let listFilter = 'all';
+$('btn-list').addEventListener('click', () => { openModal('m-list'); renderList(); setTimeout(() => $('list-q').focus(), 30); });
+$('list-q').addEventListener('input', renderList);
+$('list-sort').addEventListener('change', renderList);
+$('list-filter').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  listFilter = b.dataset.v;
+  setSeg('list-filter', listFilter);
+  renderList();
+});
+const STAR_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3.6l2.5 5.2 5.7.8-4.1 4 1 5.7-5.1-2.7-5.1 2.7 1-5.7-4.1-4 5.7-.8z"/></svg>';
+function renderList() {
+  const q = $('list-q').value.trim().toLowerCase();
+  let list = words.map((w, i) => ({ w, i }));
+  if (listFilter === 'core') list = list.filter(x => x.w.core);
+  else if (listFilter === 'fav') list = list.filter(x => x.w.fav);
+  else if (listFilter === 'weak') list = list.filter(x => stats[x.w.id] && stats[x.w.id].w > 0);
+  if (q) list = list.filter(({ w }) => [w.term, w.ko, w.def, w.ex].some(s => (s || '').toLowerCase().includes(q)));
+  const sort = $('list-sort').value;
+  if (sort === 'wrong') list.sort((a, b) => rate(b.w) - rate(a.w) || ((stats[b.w.id] || {}).w || 0) - ((stats[a.w.id] || {}).w || 0));
+  else if (sort === 'abc') list.sort((a, b) => a.w.term.localeCompare(b.w.term, 'en', { sensitivity: 'base' }));
+  $('list-sub').textContent = activeDeck() ? activeDeck().name : '';
+  $('list-count').textContent = `${list.length} / ${words.length}개`;
+  $('list-body').innerHTML = list.map(({ w }) => {
+    const s = stats[w.id];
+    const r = s && s.n ? `${Math.round(s.w / s.n * 100)}% <small>${s.w}/${s.n}</small>` : '<small>—</small>';
+    const warn = w.ex && !(w.blanks || []).length ? ' <span class="tag warn">빈칸 없음</span>' : '';
+    return `<tr data-id="${esc(w.id)}">
+      <td><button class="star-btn${w.fav ? ' on' : ''}" data-act="fav" title="즐겨찾기">${STAR_SVG}</button></td>
+      <td><div class="w${w.core ? ' core' : ''}">${esc(w.term)}</div><div class="p">${esc(w.pos)}</div></td>
+      <td class="def">${esc(w.ko)}${warn}<small>${esc(w.def)}</small></td>
+      <td class="rate hide-sm">${r}</td>
+      <td class="ops"><button class="chip-btn" data-act="edit">편집</button></td></tr>`;
+  }).join('') || `<tr><td colspan="5" style="text-align:center;color:var(--ink-4);padding:26px">${words.length ? '조건에 맞는 단어가 없습니다' : '아직 단어가 없습니다'}</td></tr>`;
+}
+$('list-body').addEventListener('click', e => {
+  const b = e.target.closest('button[data-act]');
+  if (!b) return;
+  const id = b.closest('tr').dataset.id;
+  if (b.dataset.act === 'fav') {
+    toggleFav(id);
+    b.classList.toggle('on', !!wordMap.get(id).fav);
+    if (cur && cur.id === id) { cur.w = wordMap.get(id); updateStar(); }
+  } else openEditor(id);
+});
+$('list-add').addEventListener('click', () => {
+  if (!activeDeck()) { const d = createDeck('내 단어장'); loadDeck(d.id); }
+  openEditor(null);
+});
+
+let ed = null;   // {id, picks: Set<tokenIndex>, toks: [{s,e,w}]}
+function tokenize(text) {
+  const toks = [];
+  const re = /[A-Za-z0-9][A-Za-z0-9'’\-]*/g;
+  let m;
+  while ((m = re.exec(text))) toks.push({ s: m.index, e: m.index + m[0].length });
+  return toks;
+}
+function openEditor(id) {
+  const w = id ? wordMap.get(id) : { term: '', pos: '', ko: '', def: '', ex: '', blanks: [], core: false };
+  if (!w) return;
+  ed = { id, toks: [], picks: new Set() };
+  $('ed-title').textContent = id ? '단어 편집' : '단어 추가';
+  $('ed-term').value = w.term;
+  $('ed-pos').value = w.pos;
+  $('ed-ko').value = w.ko;
+  $('ed-def').value = w.def;
+  $('ed-ex').value = w.ex;
+  $('ed-core').checked = !!w.core;
+  $('ed-delete').hidden = !id;
+  setPicksFromBlanks(w.ex, w.blanks || []);
+  renderPick();
+  openModal('m-edit');
+  setTimeout(() => $(id ? 'ed-def' : 'ed-term').focus(), 30);
+}
+function setPicksFromBlanks(text, blanks) {
+  ed.toks = tokenize(text);
+  ed.picks = new Set();
+  ed.toks.forEach((t, i) => { if (blanks.some(([a, b]) => t.s < b && t.e > a)) ed.picks.add(i); });
+}
+function blanksFromPicks() {
+  const out = [];
+  const idx = [...ed.picks].sort((a, b) => a - b);
+  const text = $('ed-ex').value;
+  for (const i of idx) {
+    const t = ed.toks[i];
+    const last = out[out.length - 1];
+    // 이어진 단어(사이에 공백만)는 한 빈칸으로
+    if (last && ed.picks.has(i - 1) && !text.slice(last[1], t.s).trim()) last[1] = t.e;
+    else out.push([t.s, t.e]);
+  }
+  return out;
+}
+function renderPick() {
+  const text = $('ed-ex').value;
+  const box = $('ed-pick');
+  if (!text.trim()) { box.innerHTML = '<span class="hint">예문이 없으면 뜻만 보고 단어를 쓰는 문제로 나옵니다.</span>'; return; }
+  let html = '', pos = 0;
+  ed.toks.forEach((t, i) => {
+    html += esc(text.slice(pos, t.s)) + `<span class="tok${ed.picks.has(i) ? ' on' : ''}" data-i="${i}">${esc(text.slice(t.s, t.e))}</span>`;
+    pos = t.e;
+  });
+  box.innerHTML = html + esc(text.slice(pos));
+}
+$('ed-pick').addEventListener('click', e => {
+  const t = e.target.closest('.tok');
+  if (!t) return;
+  const i = Number(t.dataset.i);
+  if (ed.picks.has(i)) ed.picks.delete(i); else ed.picks.add(i);
+  renderPick();
+});
+$('ed-ex').addEventListener('input', () => {
+  // 예문을 고치면 표제어로 빈칸을 다시 찾는다
+  const text = $('ed-ex').value;
+  setPicksFromBlanks(text, VocabPDF.findTarget(text, $('ed-term').value.trim()));
+  renderPick();
+});
+$('ed-term').addEventListener('change', () => {
+  if (ed.picks.size) return;
+  const text = $('ed-ex').value;
+  setPicksFromBlanks(text, VocabPDF.findTarget(text, $('ed-term').value.trim()));
+  renderPick();
+});
+$('ed-save').addEventListener('click', () => {
+  const term = $('ed-term').value.trim();
+  if (!term) { toast('단어를 입력하세요', 'bad'); $('ed-term').focus(); return; }
+  const data = {
+    term, pos: $('ed-pos').value.trim(), ko: $('ed-ko').value.trim(), def: $('ed-def').value.trim(),
+    ex: $('ed-ex').value.replace(/\s+/g, ' ').trim(), core: $('ed-core').checked,
+  };
+  // 공백을 정리했으니 빈칸 위치를 정리된 문장 기준으로 다시 맞춘다
+  const raw = $('ed-ex').value;
+  const rawBlanks = blanksFromPicks().map(([a, b]) => raw.slice(a, b));
+  data.blanks = [];
+  let from = 0;
+  for (const s of rawBlanks) {
+    const k = data.ex.indexOf(s.replace(/\s+/g, ' '), from);
+    if (k >= 0) { data.blanks.push([k, k + s.replace(/\s+/g, ' ').length]); from = k + 1; }
+  }
+  let newId = null;
+  if (ed.id) Object.assign(wordMap.get(ed.id), data);
+  else { newId = uid(); words.push(Object.assign({ id: newId, fav: false }, data)); }
+  saveWords();
+  closeModal('m-edit');
+  if (!$('m-list').hidden) renderList();
+  if (newId) {
+    // 새 단어: 학습이 끝났거나 비어 있으면 새로 시작, 진행 중이면 이번 세트 끝에 넣는다
+    if (!prog || prog.done || (!prog.queue.length && !prog.pool.length)) startSession();
+    else if (opts.scope === 'all' || (opts.scope === 'core' && data.core)) { prog.queue.push(newId); prog.roundTotal++; saveProg(); }
+  }
+  if (!cur || (cur.id === ed.id && !cur.done)) render();
+  else {
+    if (cur.id === ed.id) cur.w = wordMap.get(ed.id);
+    updateBrand(); updateScopeUI(); updateMeter();
+  }
+  toast('저장했습니다', 'good');
+});
+$('ed-delete').addEventListener('click', async () => {
+  if (!ed || !ed.id) return;
+  const w = wordMap.get(ed.id);
+  const ok = await dialog({ title: '단어 삭제', message: `"${w.term}"을(를) 지웁니다.`, okText: '삭제', danger: true });
+  if (!ok) return;
+  words = words.filter(x => x.id !== ed.id);
+  delete stats[ed.id];
+  saveWords(); saveStats();
+  if (prog) { ['queue', 'next', 'pool'].forEach(k => { prog[k] = prog[k].filter(x => x !== ed.id); }); saveProg(); }
+  closeModal('m-edit');
+  if (!$('m-list').hidden) renderList();
+  render();
+});
+
+/* ============================================================
+   7. 백업
+   ============================================================ */
+$('btn-export').addEventListener('click', () => {
+  if (!decks.length) { toast('내보낼 단어장이 없습니다'); return; }
+  const data = {
+    app: 'vocab-flashcards', version: 1, exported: new Date().toISOString(),
+    decks: decks.map(d => ({ deck: d, words: lsGet(K.words(d.id), []), stats: lsGet(K.stats(d.id), {}) })),
+  };
+  const blob = new Blob([JSON.stringify(data, null, 1)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `vocab-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+});
+$('btn-restore').addEventListener('click', () => $('file-json').click());
+$('file-json').addEventListener('change', e => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (f) restoreFromFile(f);
+});
+async function restoreFromFile(f) {
+  let data;
+  try { data = JSON.parse(await f.text()); } catch (err) { toast('JSON 파일을 읽지 못했습니다', 'bad'); return; }
+  if (!data || data.app !== 'vocab-flashcards' || !Array.isArray(data.decks)) { toast('영단어 플래시카드 백업 파일이 아닙니다', 'bad'); return; }
+  const same = data.decks.filter(x => x && x.deck && decks.some(d => d.id === x.deck.id)).length;
+  const ok = await dialog({
+    title: '백업 불러오기',
+    message: `단어장 ${data.decks.length}개를 불러옵니다.` + (same ? `\n이미 있는 단어장 ${same}개는 백업 내용으로 바뀝니다.` : ''),
+    okText: '불러오기',
+  });
+  if (!ok) return;
+  let last = null;
+  for (const x of data.decks) {
+    if (!x || !x.deck || !Array.isArray(x.words)) continue;
+    const d = { id: String(x.deck.id || uid()), name: String(x.deck.name || '단어장'), created: x.deck.created || Date.now() };
+    const clean = x.words.filter(w => w && w.term).map(w => ({
+      id: String(w.id || uid()), term: String(w.term), pos: String(w.pos || ''), ko: String(w.ko || ''), def: String(w.def || ''),
+      ex: String(w.ex || ''), blanks: Array.isArray(w.blanks) ? w.blanks.filter(r => Array.isArray(r) && r.length === 2 && r[0] < r[1] && r[1] <= String(w.ex || '').length) : [],
+      core: !!w.core, fav: !!w.fav,
+    }));
+    const i = decks.findIndex(o => o.id === d.id);
+    if (i >= 0) decks[i] = d; else decks.push(d);
+    lsSet(K.words(d.id), clean);
+    lsSet(K.stats(d.id), x.stats && typeof x.stats === 'object' ? x.stats : {});
+    try { localStorage.removeItem(K.prog(d.id)); } catch (e) { /* 무시 */ }
+    last = d.id;
+  }
+  saveDecks();
+  if (last) switchDeck(last);
+  toast('백업을 불러왔습니다', 'good');
+}
+
+/* ============================================================
+   8. 시작
+   ============================================================ */
+(function boot() {
+  if (activeId && !decks.some(d => d.id === activeId)) activeId = null;
+  if (!activeId && decks.length) activeId = decks[0].id;
+  loadDeck(activeId);
+  if (!restoreSession()) startSession();
+  render();
+  // 음성 목록은 비동기로 채워진다
+  if ('speechSynthesis' in window) speechSynthesis.getVoices();
+})();
+</script>
+</body>
+</html>
