@@ -117,6 +117,12 @@
 }
 
 * { box-sizing: border-box; }
+/* 코드 글꼴(JetBrains Mono)의 합자를 끈다 — >= 가 ≥, != 가 ≠ 처럼 한 글자로 붙어 보이면
+   실제로 쳐야 할 글자와 달라 보인다. font 단축 속성이 이 값을 되돌리므로 !important 로 고정 */
+*, *::before, *::after {
+  font-variant-ligatures: none !important;
+  font-feature-settings: "liga" 0, "calt" 0, "dlig" 0 !important;
+}
 [hidden] { display: none !important; }   /* 클래스의 display 가 hidden 속성을 무력화하지 않도록 */
 html, body { height: 100%; }
 body {
