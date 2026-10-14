@@ -3001,7 +3001,7 @@ function renderBlanks(card, openSet) {
     if (q.top < 0 || q.top > innerHeight * 0.5) $('question').scrollIntoView({ block: 'start' });
     if (first) {
       const r = first.getBoundingClientRect();
-      if (r.bottom > innerHeight - 160 || r.top < 0) first.scrollIntoView({ block: 'center' });
+      if (r.bottom > innerHeight - 160 || r.top < 0) centerBlank(first, true);
     }
   } else if (first) first.focus();
   if (nb && !hasBlanks(card)) return;      // 읽기 전용 노트북 카드
@@ -3539,17 +3539,38 @@ function acceptRevealed() {
 function focusBlank(inp) {
   if (!inp) return;
   inp.focus({ preventScroll: true });
+  centerBlank(inp);
+}
+/**
+ * 빈칸을 '보이는 영역'(위 여백 ~ 아래에 붙은 버튼 바 위)의 가운데로 옮긴다.
+ * 노트북·문서처럼 긴 화면에서는 늘 가운데로, 짧은 일반 카드는 화면 밖일 때만 움직인다.
+ * 가운데에서 조금 벗어난 정도(보이는 높이의 15% 이내)면 그대로 둬서, 바로 아랫줄 칸으로 갈 때 화면이 들썩이지 않게 한다.
+ */
+function centerBlank(inp, instant) {
+  if (!inp) return;
+  const behavior = instant || matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+  // 가로로 넘치는 코드 블록·표 안에 있으면 먼저 그 안에서 보이게
+  for (let el = inp.parentElement; el && el !== document.body; el = el.parentElement) {
+    if (el.scrollWidth > el.clientWidth + 2 && /(auto|scroll)/.test(getComputedStyle(el).overflowX)) {
+      const er = el.getBoundingClientRect(), ir = inp.getBoundingClientRect();
+      if (ir.left < er.left + 8 || ir.right > er.right - 8) el.scrollLeft += ir.left - er.left - Math.max(16, (er.width - ir.width) / 3);
+      break;
+    }
+  }
   const r = inp.getBoundingClientRect();
+  const top = 72;
   let bottom = innerHeight;
   const dock = $('stage-dock');
   if (dock && dock.offsetParent) {
-    const top = dock.getBoundingClientRect().top;
-    if (top < innerHeight) bottom = top;   // 아래에 붙은 버튼 바 위까지만 보이는 영역으로 친다
+    const t = dock.getBoundingClientRect().top;
+    if (t < innerHeight) bottom = t;       // 아래에 붙은 버튼 바 위까지만 보이는 영역으로 친다
   }
-  if (r.top < 72 || r.bottom > bottom - 28) {
-    const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
-    inp.scrollIntoView({ block: 'center', behavior: smooth ? 'smooth' : 'auto' });
-  }
+  const long = !!(dock && dock.closest('.stage.nb-mode'));
+  const offscreen = r.top < top || r.bottom > bottom - 28;
+  if (!long && !offscreen) return;
+  const delta = (r.top + r.height / 2) - (top + bottom) / 2;
+  if (!offscreen && Math.abs(delta) < (bottom - top) * 0.15) return;
+  window.scrollBy({ top: delta, behavior });
 }
 
 function hint(kind, msg) {
@@ -3892,8 +3913,8 @@ $('btn-jump').addEventListener('click', () => {
   bs.hold = false;
   const t = bs.inputs.find(i => !i.disabled);
   if (!t) return;
-  t.scrollIntoView({ block: 'center' });
   t.focus({ preventScroll: true });
+  centerBlank(t);
 });
 $('btn-giveup').addEventListener('click', giveUp);
 $('fb-accept').addEventListener('click', () => {
