@@ -3367,6 +3367,12 @@ function hintWithAccept(idx, typed) {
   el.append(acceptBtn(typed, () => acceptBlank(idx)));
 }
 
+/** 정답으로 처리한 칸에는 내가 쓴 답 대신 실제 정답을 남긴다 */
+function showAnswerIn(inp) {
+  inp.value = oneLine(inp.dataset.a);
+  growBlank(inp);
+}
+
 /** 빈칸 하나의 오답 판정을 뒤집어 정답 처리 */
 function acceptBlank(idx) {
   const inp = bs.inputs.find(i => Number(i.dataset.i) === idx);
@@ -3374,6 +3380,7 @@ function acceptBlank(idx) {
   bs.wrong.delete(idx);
   recordOverride(currentCardId);
   recordBlank(currentCardId, idx, true);
+  showAnswerIn(inp);
   inp.classList.remove('ng');
   inp.classList.add('ok');
   inp.disabled = true;
@@ -3504,7 +3511,7 @@ function acceptRevealed() {
   recordOverride(currentCardId);     // 틀렸던 입력
   recordOverride(currentCardId);     // 같은 답으로 다시 눌러 공개한 것
   overrideBlank(currentCardId, r.idx);
-  inp.value = oneLine(r.typed);
+  showAnswerIn(inp);
   inp.classList.remove('revealed');
   inp.classList.add('ok');
   growBlank(inp);
@@ -3617,7 +3624,7 @@ function acceptBlankCard() {
   bs.wrong.forEach(idx => { recordOverride(currentCardId); overrideBlank(currentCardId, idx); });
   bs.inputs.forEach(inp => {
     const idx = Number(inp.dataset.i);
-    if (bs.wrong.has(idx)) { inp.classList.remove('ng', 'revealed'); inp.classList.add('ok'); }
+    if (bs.wrong.has(idx)) { showAnswerIn(inp); inp.classList.remove('ng', 'revealed'); inp.classList.add('ok'); }
   });
   bs.wrong.clear();
   bs.revealed.clear();
@@ -3634,6 +3641,8 @@ function acceptBlankCard() {
 function acceptFull() {
   if (!fullAttempt) return;
   fullAttempt = null;
+  const card = cardMap.get(currentCardId);
+  if (card) $('answer-input').value = card.term;     // 인정해도 남는 건 실제 정답 — 다음에 볼 때 헷갈리지 않게
   recordOverride(currentCardId);
   if (fullRevealed) { recordOverride(currentCardId); overrideBlank(currentCardId, '*'); }   // 공개 기록까지 정정
   else recordBlank(currentCardId, '*', true);
